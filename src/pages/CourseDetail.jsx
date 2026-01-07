@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 import { Link } from "react-router-dom";
 import {
   BookOpen,
@@ -25,6 +26,89 @@ export default function CourseDetail() {
   const [submissionText, setSubmissionText] = useState("");
   const [submissionFile, setSubmissionFile] = useState(null);
 
+  const [materials, setMaterials] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [assignments, setAssignments] = useState([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(true);
+
+  const [quizzes, setQuizzes] = useState([]);
+  const [loadingQuizzes, setLoadingQuizzes] = useState(true);
+
+  const [discussions, setDiscussions] = useState([]);
+  const [replyContent, setReplyContent] = useState({});
+  const [loadingDiscussions, setLoadingDiscussions] = useState(true);
+  const [likes, setLikes] = useState({});
+
+  const [members, setMembers] = useState([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+
+  // Fungsi Fetch Data dari Supabase
+  const fetchMaterials = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("materials")
+        .select("*")
+        .order("id", { ascending: true });
+
+      if (error) throw error;
+      if (data) setMaterials(data);
+    } catch (error) {
+      console.error("Error fetching materials:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMaterials();
+  }, []);
+
+  const fetchAssignments = async () => {
+    try {
+      setLoadingAssignments(true);
+      const { data, error } = await supabase
+        .from("assignments") // Pastikan nama tabel di Supabase adalah 'assignments'
+        .select("*")
+        .order("deadline", { ascending: true });
+
+      if (error) throw error;
+      setAssignments(data || []);
+    } catch (error) {
+      console.error("Error fetching assignments:", error.message);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssignments();
+    // fetchMaterials(); // Fungsi materi sebelumnya
+  }, []);
+
+  const fetchQuizzes = async () => {
+    try {
+      setLoadingQuizzes(true);
+      // Mengambil data dari tabel 'quizzes'
+      const { data, error } = await supabase
+        .from("quizzes")
+        .select("*")
+        .order("id", { ascending: true });
+
+      if (error) throw error;
+      setQuizzes(data || []);
+    } catch (error) {
+      console.error("Error fetching quizzes:", error.message);
+    } finally {
+      setLoadingQuizzes(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuizzes();
+  }, []);
+
   // DATA DUMMY
   const course = {
     title: "Pemrograman Web",
@@ -36,37 +120,71 @@ export default function CourseDetail() {
     coverImage: null,
   };
 
-  const materials = [
-    { id: 1, title: "Pengenalan HTML", type: "video", duration: "45 menit", completed: true },
-    { id: 2, title: "Styling dengan CSS", type: "video", duration: "60 menit", completed: true },
-    { id: 3, title: "JavaScript Dasar", type: "pdf", size: "2.5 MB", completed: false },
-    { id: 4, title: "DOM Manipulation", type: "video", duration: "50 menit", completed: false },
-  ];
+  const fetchDiscussions = async () => {
+    try {
+      setLoadingDiscussions(true);
+      const { data, error } = await supabase
+        .from("discussions")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-  const assignments = [
-    { id: 1, title: "Membuat Portfolio Website", dueDate: "2025-12-25", status: "submitted", score: 85 },
-    { id: 2, title: "CSS Grid Layout", dueDate: "2025-12-28", status: "pending", score: null },
-    { id: 3, title: "JavaScript Calculator", dueDate: "2025-12-30", status: "pending", score: null },
-  ];
+      if (error) throw error;
+      setDiscussions(data || []);
+    } catch (error) {
+      console.error("Error:", error.message);
+    } finally {
+      setLoadingDiscussions(false);
+    }
+  };
 
-  const quizzes = [
-    { id: 1, title: "Quiz HTML Fundamentals", questions: 20, duration: "30 menit", status: "completed", score: 90 },
-    { id: 2, title: "Quiz CSS Basics", questions: 15, duration: "20 menit", status: "available", score: null },
-    { id: 3, title: "Quiz JavaScript", questions: 25, duration: "40 menit", status: "locked", score: null },
-  ];
+  useEffect(() => {
+    fetchDiscussions();
+  }, []);
 
-  const discussions = [
-    { id: 1, author: "Budi Santoso", topic: "Bagaimana cara menggunakan Flexbox?", replies: 5, time: "2 jam lalu" },
-    { id: 2, author: "Siti Nurhaliza", topic: "Error saat menjalankan JavaScript", replies: 3, time: "5 jam lalu" },
-    { id: 3, author: "Ahmad Fauzi", topic: "Tips membuat website responsif", replies: 8, time: "1 hari lalu" },
-  ];
+  const fetchMembers = async () => {
+    try {
+      setLoadingMembers(true);
+      
+      // 1. Ambil data dari course_members
+      const { data: memberData, error: memberError } = await supabase
+        .from("course_members")
+        .select("id, user_id, role")
+        .order("role", { ascending: true });
 
-  const members = [
-    { id: 1, name: "Bu Aisyah Rahman", role: "Guru", avatar: null },
-    { id: 2, name: "Budi Santoso", role: "Siswa", avatar: null },
-    { id: 3, name: "Siti Nurhaliza", role: "Siswa", avatar: null },
-    { id: 4, name: "Ahmad Fauzi", role: "Siswa", avatar: null },
-  ];
+      if (memberError) throw memberError;
+
+      // 2. Ambil data dari profiles berdasarkan user_id yang ada
+      const userIds = memberData.map(m => m.user_id);
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", userIds);
+
+      if (profileError) throw profileError;
+
+      // 3. Gabungkan data untuk UI
+      const combinedData = memberData.map(member => {
+        const profile = profileData.find(p => p.id === member.user_id);
+        
+        // Jika full_name ada isinya, tampilkan. Jika NULL, tampilkan "Member"
+        return {
+          id: member.id,
+          role: member.role,
+          name: profile?.full_name || `Member ${member.user_id.substring(0, 4)}`
+        };
+      });
+
+      setMembers(combinedData);
+    } catch (error) {
+      console.error("Error:", error.message);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMembers();
+  }, []);
 
   const handleOpenSubmitModal = (assignment) => {
     setSelectedAssignment(assignment);
@@ -103,10 +221,6 @@ export default function CourseDetail() {
     alert("✅ Tugas berhasil dikumpulkan!");
     handleCloseSubmitModal();
   };
-
-  // Discussions
-  const [replyContent, setReplyContent] = useState({});
-  const [likes, setLikes] = useState({});
 
   const handleLikeDiscussion = (id) => {
     setLikes((prev) => ({
@@ -263,76 +377,89 @@ export default function CourseDetail() {
             {activeTab === "materials" && (
               <div>
                 <h5 className="fw-bold mb-4">📘 Materi Pembelajaran</h5>
-                <div className="d-flex flex-column gap-3">
-                  {materials.map((material) => (
-                    <div 
-                      key={material.id}
-                      className="card border shadow-sm"
-                      style={{
-                        borderRadius: "12px",
-                        transition: "all 0.3s ease",
-                        borderColor: material.completed ? "#16a34a" : "#e5e7eb"
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = "translateX(8px)";
-                        e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateX(0)";
-                        e.currentTarget.style.boxShadow = "";
-                      }}
-                    >
-                      <div className="card-body p-3 d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center gap-3">
-                          <div 
-                            className="d-flex align-items-center justify-content-center rounded-circle"
-                            style={{
-                              width: "48px",
-                              height: "48px",
-                              background: material.completed ? "#dcfce7" : "#dbeafe"
-                            }}
-                          >
-                            {material.type === "video" ? (
-                              <Play size={24} style={{ color: material.completed ? "#16a34a" : "#2563eb" }} />
-                            ) : (
-                              <FileText size={24} style={{ color: material.completed ? "#16a34a" : "#2563eb" }} />
-                            )}
-                          </div>
-                          <div>
-                            <h6 className="mb-1 fw-semibold">{material.title}</h6>
-                            <div className="d-flex align-items-center gap-3 small text-muted">
-                              <span className="d-flex align-items-center gap-1">
-                                {material.type === "video" ? (
-                                  <>
-                                    <Clock size={14} />
-                                    {material.duration}
-                                  </>
-                                ) : (
-                                  <>
-                                    <Download size={14} />
-                                    {material.size}
-                                  </>
-                                )}
-                              </span>
-                              {material.completed && (
-                                <span className="badge bg-success-subtle text-success">
-                                  <CheckCircle size={12} className="me-1" />
-                                  Selesai
-                                </span>
+                
+                {loading ? (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary" role="status"></div>
+                    <p className="mt-2 text-muted">Memuat materi...</p>
+                  </div>
+                ) : materials.length === 0 ? (
+                  <div className="text-center py-5 text-muted">Belum ada materi tersedia.</div>
+                ) : (
+                  <div className="d-flex flex-column gap-3">
+                    {materials.map((material) => (
+                      <div 
+                        key={material.id}
+                        className="card border shadow-sm"
+                        style={{
+                          borderRadius: "12px",
+                          transition: "all 0.3s ease",
+                          borderColor: material.completed ? "#16a34a" : "#e5e7eb"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = "translateX(8px)";
+                          e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "translateX(0)";
+                          e.currentTarget.style.boxShadow = "";
+                        }}
+                      >
+                        <div className="card-body p-3 d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center gap-3">
+                            <div 
+                              className="d-flex align-items-center justify-content-center rounded-circle"
+                              style={{
+                                width: "48px",
+                                height: "48px",
+                                background: material.completed ? "#dcfce7" : "#dbeafe"
+                              }}
+                            >
+                              {material.type === "video" ? (
+                                <Play size={24} style={{ color: material.completed ? "#16a34a" : "#2563eb" }} />
+                              ) : (
+                                <FileText size={24} style={{ color: material.completed ? "#16a34a" : "#2563eb" }} />
                               )}
                             </div>
+                            <div>
+                              <h6 className="mb-1 fw-semibold">{material.title}</h6>
+                              <div className="d-flex align-items-center gap-3 small text-muted">
+                                <span className="d-flex align-items-center gap-1">
+                                  {material.type === "video" ? (
+                                    <>
+                                      <Clock size={14} />
+                                      {material.duration}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Download size={14} />
+                                      {material.size}
+                                    </>
+                                  )}
+                                </span>
+                                {material.completed && (
+                                  <span className="badge bg-success-subtle text-success">
+                                    <CheckCircle size={12} className="me-1" />
+                                    Selesai
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
+                          <button 
+                            className="btn btn-sm btn-primary"
+                            style={{ borderRadius: "8px" }}
+                            onClick={() => {
+                              if (material.file_url) window.open(material.file_url, "_blank");
+                            }}
+                          >
+                            {material.type === "video" ? "Tonton" : "Unduh"}
+                          </button>
                         </div>
-                        <button 
-                          className="btn btn-sm btn-primary"
-                          style={{ borderRadius: "8px" }}
-                        >
-                          {material.type === "video" ? "Tonton" : "Unduh"}
-                        </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -341,63 +468,70 @@ export default function CourseDetail() {
               <div>
                 <h5 className="fw-bold mb-4">📝 Daftar Tugas</h5>
                 <div className="d-flex flex-column gap-3">
-                  {assignments.map((assignment) => (
-                    <div 
-                      key={assignment.id}
-                      className="card border shadow-sm"
-                      style={{
-                        borderRadius: "12px",
-                        transition: "all 0.3s ease",
-                        borderColor: assignment.status === "submitted" ? "#16a34a" : "#e5e7eb"
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = "translateX(8px)";
-                        e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateX(0)";
-                        e.currentTarget.style.boxShadow = "";
-                      }}
-                    >
-                      <div className="card-body p-4">
-                        <div className="d-flex justify-content-between align-items-start mb-3">
-                          <div>
-                            <h6 className="fw-bold mb-2">{assignment.title}</h6>
-                            <div className="d-flex align-items-center gap-3 small text-muted">
-                              <span className="d-flex align-items-center gap-1">
-                                <Calendar size={14} />
-                                Deadline: {assignment.dueDate}
-                              </span>
-                            </div>
-                          </div>
-                          {assignment.status === "submitted" && assignment.score && (
-                            <div className="text-end">
-                              <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
-                                {assignment.score}
+                  {loadingAssignments ? (
+                    <div className="text-center py-4">Memuat tugas...</div>
+                  ) : assignments.length === 0 ? (
+                    <div className="text-center py-4 text-muted">Belum ada tugas saat ini.</div>
+                  ) : (
+                    assignments.map((assignment) => (
+                      <div 
+                        key={assignment.id}
+                        className="card border shadow-sm"
+                        style={{
+                          borderRadius: "12px",
+                          transition: "all 0.3s ease",
+                          borderColor: assignment.status === "submitted" ? "#16a34a" : "#e5e7eb"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = "translateX(8px)";
+                          e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "translateX(0)";
+                          e.currentTarget.style.boxShadow = "";
+                        }}
+                      >
+                        <div className="card-body p-4">
+                          <div className="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                              <h6 className="fw-bold mb-2">{assignment.title}</h6>
+                              <div className="d-flex align-items-center gap-3 small text-muted">
+                                <span className="d-flex align-items-center gap-1">
+                                  <Calendar size={14} />
+                                  Deadline: {new Date(assignment.deadline).toLocaleDateString('id-ID')}
+                                </span>
                               </div>
-                              <small className="text-muted">Nilai</small>
                             </div>
-                          )}
-                        </div>
-                        <div className="d-flex gap-2">
-                          {assignment.status === "submitted" ? (
-                            <span className="badge bg-success-subtle text-success px-3 py-2">
-                              <CheckCircle size={14} className="me-1" />
-                              Sudah Dikumpulkan
-                            </span>
-                          ) : (
-                            <button 
-                              className="btn btn-primary btn-sm"
-                              style={{ borderRadius: "8px" }}
-                              onClick={() => handleOpenSubmitModal(assignment)}
-                            >
-                              Kerjakan Tugas
-                            </button>
-                          )}
+                            {/* Tampilkan Nilai Jika Sudah Ada */}
+                            {assignment.status === "submitted" && assignment.score !== null && (
+                              <div className="text-end">
+                                <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
+                                  {assignment.score}
+                                </div>
+                                <small className="text-muted">Nilai</small>
+                              </div>
+                            )}
+                          </div>
+                          <div className="d-flex gap-2">
+                            {assignment.status === "submitted" ? (
+                              <span className="badge bg-success-subtle text-success px-3 py-2">
+                                <CheckCircle size={14} className="me-1" />
+                                Sudah Dikumpulkan
+                              </span>
+                            ) : (
+                              <button 
+                                className="btn btn-primary btn-sm"
+                                style={{ borderRadius: "8px" }}
+                                onClick={() => handleOpenSubmitModal(assignment)}
+                              >
+                                Kerjakan Tugas
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -407,73 +541,85 @@ export default function CourseDetail() {
               <div>
                 <h5 className="fw-bold mb-4">🏆 Daftar Kuis</h5>
                 <div className="d-flex flex-column gap-3">
-                  {quizzes.map((quiz) => (
-                    <div 
-                      key={quiz.id}
-                      className="card border shadow-sm"
-                      style={{
-                        borderRadius: "12px",
-                        transition: "all 0.3s ease",
-                        opacity: quiz.status === "locked" ? 0.6 : 1
-                      }}
-                      onMouseEnter={(e) => {
-                        if (quiz.status !== "locked") {
-                          e.currentTarget.style.transform = "translateX(8px)";
-                          e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateX(0)";
-                        e.currentTarget.style.boxShadow = "";
-                      }}
-                    >
-                      <div className="card-body p-4">
-                        <div className="d-flex justify-content-between align-items-start">
-                          <div className="flex-grow-1">
-                            <h6 className="fw-bold mb-2">{quiz.title}</h6>
-                            <div className="d-flex align-items-center gap-3 small text-muted mb-3">
-                              <span>{quiz.questions} soal</span>
-                              <span>•</span>
-                              <span className="d-flex align-items-center gap-1">
-                                <Clock size={14} />
-                                {quiz.duration}
-                              </span>
+                  {loadingQuizzes ? (
+                    <div className="text-center py-4 text-muted">Memuat daftar kuis...</div>
+                  ) : quizzes.length === 0 ? (
+                    <div className="text-center py-4 text-muted">Belum ada kuis yang tersedia.</div>
+                  ) : (
+                    quizzes.map((quiz) => (
+                      <div 
+                        key={quiz.id}
+                        className="card border shadow-sm"
+                        style={{
+                          borderRadius: "12px",
+                          transition: "all 0.3s ease",
+                          opacity: quiz.status === "locked" ? 0.6 : 1,
+                          cursor: quiz.status === "locked" ? "not-allowed" : "pointer"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (quiz.status !== "locked") {
+                            e.currentTarget.style.transform = "translateX(8px)";
+                            e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "translateX(0)";
+                          e.currentTarget.style.boxShadow = "";
+                        }}
+                      >
+                        <div className="card-body p-4">
+                          <div className="d-flex justify-content-between align-items-start">
+                            <div className="flex-grow-1">
+                              <h6 className="fw-bold mb-2">{quiz.title}</h6>
+                              <div className="d-flex align-items-center gap-3 small text-muted mb-3">
+                                <span>{quiz.questions_count || 0} soal</span>
+                                <span>•</span>
+                                <span className="d-flex align-items-center gap-1">
+                                  <Clock size={14} />
+                                  {quiz.duration} menit
+                                </span>
+                              </div>
+                              
+                              {/* Logic Status Kuis */}
+                              {quiz.status === "completed" ? (
+                                <span className="badge bg-success-subtle text-success px-3 py-2">
+                                  <CheckCircle size={14} className="me-1" />
+                                  Selesai - Nilai: {quiz.score}
+                                </span>
+                              ) : quiz.status === "available" ? (
+                                <button 
+                                  className="btn btn-primary btn-sm"
+                                  style={{ borderRadius: "8px" }}
+                                  onClick={() => console.log("Mulai kuis:", quiz.id)}
+                                >
+                                  Mulai Kuis
+                                </button>
+                              ) : (
+                                <span className="badge bg-secondary px-3 py-2">
+                                  🔒 Terkunci
+                                </span>
+                              )}
                             </div>
-                            {quiz.status === "completed" ? (
-                              <span className="badge bg-success-subtle text-success px-3 py-2">
-                                <CheckCircle size={14} className="me-1" />
-                                Selesai - Nilai: {quiz.score}
-                              </span>
-                            ) : quiz.status === "available" ? (
-                              <button 
-                                className="btn btn-primary btn-sm"
-                                style={{ borderRadius: "8px" }}
-                              >
-                                Mulai Kuis
-                              </button>
-                            ) : (
-                              <span className="badge bg-secondary px-3 py-2">
-                                🔒 Terkunci
-                              </span>
+
+                            {/* Tampilan Nilai di Samping */}
+                            {quiz.status === "completed" && quiz.score !== null && (
+                              <div className="text-end ms-3">
+                                <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
+                                  {quiz.score}
+                                </div>
+                                <small className="text-muted">Nilai</small>
+                              </div>
                             )}
                           </div>
-                          {quiz.status === "completed" && quiz.score && (
-                            <div className="text-end ms-3">
-                              <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
-                                {quiz.score}
-                              </div>
-                              <small className="text-muted">Nilai</small>
-                            </div>
-                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}
 
-            {/* DISCUSSIONS TAB */}
+            {/* DISCUSSIONS TAB*/}
             {activeTab === "discussions" && (
               <div>
                 <div className="d-flex justify-content-between align-items-center mb-4">
@@ -481,13 +627,16 @@ export default function CourseDetail() {
                   <button
                     className="btn btn-primary btn-sm"
                     style={{ borderRadius: "8px" }}
+                    onClick={() => {/* Tambahkan logika modal buat diskusi baru di sini */}}
                   >
                     <Plus size={16} className="me-1" />
                     Buat Diskusi
                   </button>
                 </div>
 
-                {discussions.length === 0 ? (
+                {loadingDiscussions ? (
+                  <div className="text-center py-5">Memuat diskusi...</div>
+                ) : discussions.length === 0 ? (
                   <div className="text-center text-muted py-5">
                     <MessageSquare size={48} className="mb-3" style={{ opacity: 0.5 }} />
                     <p>Belum ada diskusi</p>
@@ -513,16 +662,19 @@ export default function CourseDetail() {
                                 background: "linear-gradient(135deg, #2563eb, #16a34a)",
                               }}
                             >
-                              {discussion.author.charAt(0)}
+                              {discussion.author?.charAt(0).toUpperCase()}
                             </div>
 
                             <div className="flex-grow-1">
-                              <div className="d-flex gap-2 mb-2">
+                              <div className="d-flex gap-2 mb-2 align-items-center">
                                 <span className="fw-semibold">{discussion.author}</span>
-                                <span className="text-muted small">{discussion.date}</span>
+                                <span className="text-muted small">
+                                  {new Date(discussion.created_at).toLocaleDateString('id-ID')}
+                                </span>
                               </div>
 
                               <h6 className="fw-bold mb-2">{discussion.title}</h6>
+                              <p className="text-muted small mb-0">{discussion.content}</p>
 
                               {/* ACTIONS */}
                               <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
@@ -532,20 +684,18 @@ export default function CourseDetail() {
                                     onClick={() => handleLikeDiscussion(discussion.id)}
                                     style={{ borderRadius: "8px" }}
                                   >
-                                    ❤️ {likes[discussion.id] || 0}
+                                    ❤️ {discussion.likes || 0}
                                   </button>
 
                                   <span className="d-flex align-items-center gap-2">
                                     <MessageSquare size={16} />
-                                    {discussion.replies} balasan
+                                    {discussion.replies_count || 0} balasan
                                   </span>
                                 </div>
 
                                 <button
                                   className="btn btn-outline-danger btn-sm"
-                                  onClick={() =>
-                                    handleDeleteItem("discussions", discussion.id)
-                                  }
+                                  onClick={() => handleDeleteItem("discussions", discussion.id)}
                                   style={{ borderRadius: "8px" }}
                                 >
                                   <Trash2 size={16} />
@@ -589,61 +739,63 @@ export default function CourseDetail() {
               </div>
             )}
 
-
-            {/* MEMBERS TAB */}
-            {activeTab === "members" && (
-              <div>
-                <h5 className="fw-bold mb-4">👥 Anggota Kelas ({members.length})</h5>
-                <div className="row g-3">
-                  {members.map((member) => (
-                    <div key={member.id} className="col-md-6 col-lg-4">
-                      <div 
-                        className="card border shadow-sm h-100"
-                        style={{
-                          borderRadius: "12px",
-                          transition: "all 0.3s ease"
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateY(-5px)";
-                          e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow = "";
-                        }}
-                      >
-                        <div className="card-body p-4 text-center">
+              {/* MEMBERS TAB */}
+              {activeTab === "members" && (
+                <div>
+                  <h5 className="fw-bold mb-4">👥 Anggota Kelas ({members.length})</h5>
+                  
+                  {loadingMembers ? (
+                    <div className="text-center py-5 text-muted">Memuat daftar anggota...</div>
+                  ) : (
+                    <div className="row g-3">
+                      {members.map((member) => (
+                        <div key={member.id} className="col-md-6 col-lg-4">
                           <div 
-                            className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold mx-auto mb-3"
-                            style={{
-                              width: "64px",
-                              height: "64px",
-                              background: member.role === "Guru" 
-                                ? "linear-gradient(135deg, #2563eb, #16a34a)" 
-                                : "linear-gradient(135deg, #9333ea, #ea580c)"
+                            className="card border shadow-sm h-100"
+                            style={{ borderRadius: "12px", transition: "all 0.3s ease" }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = "translateY(-5px)";
+                              e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = "translateY(0)";
+                              e.currentTarget.style.boxShadow = "";
                             }}
                           >
-                            {member.name.charAt(0)}
+                            <div className="card-body p-4 text-center">
+                              <div 
+                                className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold mx-auto mb-3"
+                                style={{
+                                  width: "64px",
+                                  height: "64px",
+                                  background: member.role === "Guru" 
+                                    ? "linear-gradient(135deg, #2563eb, #16a34a)" 
+                                    : "linear-gradient(135deg, #9333ea, #ea580c)"
+                                }}
+                              >
+                                {/* Ambil inisial dari nama yang sudah di-join tadi */}
+                                {member.name.charAt(0).toUpperCase()}
+                              </div>
+                              <h6 className="fw-bold mb-1">{member.name}</h6>
+                              <span 
+                                className="badge"
+                                style={{
+                                  background: member.role === "Guru" ? "#dbeafe" : "#faf5ff",
+                                  color: member.role === "Guru" ? "#2563eb" : "#9333ea",
+                                  padding: "6px 12px",
+                                  borderRadius: "6px"
+                                }}
+                              >
+                                {member.role}
+                              </span>
+                            </div>
                           </div>
-                          <h6 className="fw-bold mb-1">{member.name}</h6>
-                          <span 
-                            className="badge"
-                            style={{
-                              background: member.role === "Guru" ? "#dbeafe" : "#faf5ff",
-                              color: member.role === "Guru" ? "#2563eb" : "#9333ea",
-                              padding: "6px 12px",
-                              borderRadius: "6px"
-                            }}
-                          >
-                            {member.role}
-                          </span>
                         </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            )}
+              )}
 
           </div>
         </div>
@@ -684,7 +836,7 @@ export default function CourseDetail() {
                     <Calendar size={24} style={{ color: "#2563eb" }} />
                     <div>
                       <div className="fw-semibold text-dark">Deadline Pengumpulan</div>
-                      <div className="small text-muted">{selectedAssignment.dueDate}</div>
+                      <div className="small text-muted">{selectedAssignment.deadline}</div>
                     </div>
                   </div>
 
