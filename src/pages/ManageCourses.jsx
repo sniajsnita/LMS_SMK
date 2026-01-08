@@ -66,35 +66,60 @@ export default function ManageCoursesUI() {
 
   const fetchCourses = async () => {
     setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return; // Pastikan user.id ada sebelum lanjut
 
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return;
+      // LANGKAH 1: Gunakan nama kolom yang konsisten (courses_id sesuai select Anda)
+      const { data: membershipData, error: memError } = await supabase
+        .from("course_members")
+        .select(`role, courses_id`)
+        .eq("user_id", user.id)
+        .eq("role", "teacher");
 
-    const { data, error } = await supabase
-      .from("course_members")
-      .select(`
-        role,
-        courses (
-          id,
-          title,
-          description,
-          subject,
-          class_code,
-          cover_image
-        )
-      `)
-      .eq("user_id", userData.user.id);
+      if (memError) throw memError;
+      if (!membershipData || membershipData.length === 0) {
+        setCourses([]);
+        return;
+      }
 
-    if (!error) {
-      setCourses(
-        data.map((row) => ({
-          ...row.courses,
-          user_role: row.role,
-        }))
-      );
+      // Ambil ID kelas (Pastikan menggunakan courses_id sesuai hasil select diatas)
+      const courseIds = membershipData.map(m => m.courses_id).filter(id => id !== undefined);
+
+      // LANGKAH 2: Ambil detail kelas (Gunakan created_by sebagai ID pengajar)
+      const { data: courseData, error: courseError } = await supabase
+        .from("courses")
+        .select("id, title, description, subject, class_code, cover_image, created_by")
+        .in("id", courseIds);
+
+      if (courseError) throw courseError;
+
+      // LANGKAH 3: Ambil data profil berdasarkan created_by
+      const teacherIds = [...new Set(courseData.map(c => c.created_by))].filter(id => id !== null);
+      
+      const { data: profileData, error: profError } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", teacherIds);
+
+      if (profError) throw profError;
+
+      // LANGKAH 4: Gabungkan data
+      const finalData = courseData.map(course => {
+        const instructorProfile = profileData?.find(p => p.id === course.created_by);
+        return {
+          ...course,
+          user_role: "teacher",
+          teacher_display_name: instructorProfile?.full_name || "Nama Pengajar"
+        };
+      });
+
+      setCourses(finalData);
+    } catch (err) {
+      console.error("Fetch Error:", err.message);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -236,7 +261,7 @@ export default function ManageCoursesUI() {
           full_name
         )
       `)
-      .eq("courses_id", selectedCourse.id);
+      .eq("course_id", selectedCourse.id);
 
     if (!error) {
       setMembers(
@@ -643,8 +668,8 @@ export default function ManageCoursesUI() {
               </div>
             </div>
           ) : (
-            filteredCourses.map((course) => (
-              <div className="col-12 col-md-6 col-lg-4" key={course.id}>
+            filteredCourses.map((course, index) => (
+              <div className="col-12 col-md-6 col-lg-4" key={`${course.id}-${index}`}>
                 <CourseCard
                   course={course}
                   onSelect={setSelectedCourse}
