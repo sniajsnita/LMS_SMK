@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   BookOpen,
   FileText,
@@ -26,6 +26,9 @@ export default function CourseDetail() {
   const [submissionText, setSubmissionText] = useState("");
   const [submissionFile, setSubmissionFile] = useState(null);
 
+  const [course, setCourse] = useState(null); 
+  const [loadingCourse, setLoadingCourse] = useState(true);
+
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,148 +46,99 @@ export default function CourseDetail() {
   const [members, setMembers] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
 
-  // Fungsi Fetch Data dari Supabase
-  const fetchMaterials = async () => {
+  // 1. Definisikan ID di baris paling atas
+  const [searchParams] = useSearchParams();
+  const id = searchParams.get("id");
+
+  // 2. Fungsi Fetch Master (Gabungan)
+  const fetchAllCourseData = async (courseId) => {
+    if (!courseId) return;
+
     try {
+      // Set semua loading jadi true di awal
       setLoading(true);
-      const { data, error } = await supabase
-        .from("materials")
-        .select("*")
-        .order("id", { ascending: true });
-
-      if (error) throw error;
-      if (data) setMaterials(data);
-    } catch (error) {
-      console.error("Error fetching materials:", error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMaterials();
-  }, []);
-
-  const fetchAssignments = async () => {
-    try {
-      setLoadingAssignments(true);
-      const { data, error } = await supabase
-        .from("assignments") // Pastikan nama tabel di Supabase adalah 'assignments'
-        .select("*")
-        .order("deadline", { ascending: true });
-
-      if (error) throw error;
-      setAssignments(data || []);
-    } catch (error) {
-      console.error("Error fetching assignments:", error.message);
-    } finally {
-      setLoadingAssignments(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAssignments();
-    // fetchMaterials(); // Fungsi materi sebelumnya
-  }, []);
-
-  const fetchQuizzes = async () => {
-    try {
-      setLoadingQuizzes(true);
-      // Mengambil data dari tabel 'quizzes'
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select("*")
-        .order("id", { ascending: true });
-
-      if (error) throw error;
-      setQuizzes(data || []);
-    } catch (error) {
-      console.error("Error fetching quizzes:", error.message);
-    } finally {
-      setLoadingQuizzes(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchQuizzes();
-  }, []);
-
-  // DATA DUMMY
-  const course = {
-    title: "Pemrograman Web",
-    subject: "RPL",
-    description:
-      "Mempelajari dasar HTML, CSS, dan JavaScript untuk pengembangan web modern dan responsif.",
-    teacher: "Bu Aisyah Rahman",
-    students: 28,
-    coverImage: null,
-  };
-
-  const fetchDiscussions = async () => {
-    try {
-      setLoadingDiscussions(true);
-      const { data, error } = await supabase
-        .from("discussions")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setDiscussions(data || []);
-    } catch (error) {
-      console.error("Error:", error.message);
-    } finally {
-      setLoadingDiscussions(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDiscussions();
-  }, []);
-
-  const fetchMembers = async () => {
-    try {
       setLoadingMembers(true);
-      
-      // 1. Ambil data dari course_members
-      const { data: memberData, error: memberError } = await supabase
-        .from("course_members")
-        .select("id, user_id, role")
-        .order("role", { ascending: true });
 
-      if (memberError) throw memberError;
+      // 1. Ambil Detail Course & Count
+      const { data: courseData, error: courseErr } = await supabase
+        .from("courses")
+        .select(`*, course_members(count)`)
+        .eq("id", courseId)
+        .eq("course_members.role", "student")
+        .single();
 
-      // 2. Ambil data dari profiles berdasarkan user_id yang ada
-      const userIds = memberData.map(m => m.user_id);
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in("id", userIds);
+      if (courseErr) throw courseErr;
 
-      if (profileError) throw profileError;
+      // 2. Ambil Nama Guru
+      let teacherName = "Guru Pengampu";
+      if (courseData.created_by) {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", courseData.created_by)
+          .single();
+        if (profileData) teacherName = profileData.full_name;
+      }
 
-      // 3. Gabungkan data untuk UI
-      const combinedData = memberData.map(member => {
-        const profile = profileData.find(p => p.id === member.user_id);
-        
-        // Jika full_name ada isinya, tampilkan. Jika NULL, tampilkan "Member"
-        return {
-          id: member.id,
-          role: member.role,
-          name: profile?.full_name || `Member ${member.user_id.substring(0, 4)}`
-        };
+      setCourse({
+        ...courseData,
+        teacher_name: teacherName,
+        student_count: courseData.course_members?.[0]?.count || 0 
       });
 
-      setMembers(combinedData);
+      // 3. Ambil SEMUA data secara paralel (termasuk members)
+      const [mats, assigns, qzs, discs, mems] = await Promise.all([
+        supabase.from("materials").select("*").eq("course_id", courseId).order("id", { ascending: true }),
+        supabase.from("assignments").select("*").eq("course_id", courseId).order("deadline", { ascending: true }),
+        supabase.from("quizzes").select("*").eq("course_id", courseId).order("id", { ascending: true }),
+        supabase.from("discussions").select("*").eq("course_id", courseId).order("created_at", { ascending: false }),
+        supabase.from("course_members").select("courses_id, user_id, role").eq("courses_id", courseId) // Fetch members di sini
+      ]);
+
+      setMaterials(mats.data || []);
+      setAssignments(assigns.data || []);
+      setQuizzes(qzs.data || []);
+      setDiscussions(discs.data || []);
+
+      // 4. Proses Profiles untuk Members
+      if (mems.data && mems.data.length > 0) {
+        const userIds = mems.data.map(m => m.user_id);
+        const { data: profiles, error: profErr } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds);
+
+        if (profErr) throw profErr;
+
+        const combined = mems.data.map(m => ({
+          id: m.id,
+          role: m.role === 'teacher' ? 'Guru' : 'Siswa', 
+          name: profiles?.find(p => p.id === m.user_id)?.full_name || "Anggota Kelas"
+        }));
+        
+        console.log("Data members berhasil digabung:", combined); // Cek console
+        setMembers(combined);
+      } else {
+        setMembers([]);
+      }
+
     } catch (error) {
-      console.error("Error:", error.message);
+      console.error("Gagal memuat data kelas:", error.message);
     } finally {
+      setLoading(false);
+      setLoadingAssignments(false);
+      setLoadingQuizzes(false);
+      setLoadingDiscussions(false);
       setLoadingMembers(false);
     }
   };
 
+  // 3. SATU useEffect untuk semua (Hapus semua useEffect lama kamu)
   useEffect(() => {
-    fetchMembers();
-  }, []);
+    if (id) {
+      fetchAllCourseData(id);
+    }
+  }, [id]);
 
   const handleOpenSubmitModal = (assignment) => {
     setSelectedAssignment(assignment);
@@ -283,52 +237,57 @@ export default function CourseDetail() {
           }}
         />
 
-        <div className="container h-100 d-flex flex-column justify-content-end pb-4 position-relative" style={{ zIndex: 2 }}>
-
-          <Link 
-            to="/course" 
-            className="btn btn-sm btn-light mb-3 shadow-sm"
-            style={{
-              width: "fit-content",
-              borderRadius: "8px",
-              padding: "8px 16px",
-              fontWeight: "500"
-            }}
-          >
-            <ArrowLeft size={16} className="me-2" />
-            Kembali
-          </Link>
-
-          <div className="d-flex align-items-center gap-3 mb-3 flex-wrap">
-            <span 
-              className="badge"
+        {/* Jika course belum ada, tampilkan skeleton atau loading singkat */}
+        {!course ? (
+          <div className="container pb-4 text-white">Memuat data kelas...</div>
+        ) : (
+          <div className="container h-100 d-flex flex-column justify-content-end pb-4 position-relative" style={{ zIndex: 2 }}>
+            <Link 
+              to="/course" 
+              className="btn btn-sm btn-light mb-3 shadow-sm"
               style={{
-                background: "rgba(255, 255, 255, 0.2)",
-                backdropFilter: "blur(10px)",
-                color: "white",
-                padding: "8px 16px",
+                width: "fit-content",
                 borderRadius: "8px",
-                fontWeight: "600",
-                fontSize: "0.875rem"
+                padding: "8px 16px",
+                fontWeight: "500"
               }}
             >
-              {course.subject}
-            </span>
-            <span className="d-flex align-items-center gap-2 small">
-              <Users size={16} />
-              {course.teacher}
-            </span>
-            <span className="d-flex align-items-center gap-2 small">
-              <Users size={16} />
-              {course.students} siswa
-            </span>
-          </div>
+              <ArrowLeft size={16} className="me-2" />
+              Kembali
+            </Link>
 
-          <h1 className="fw-bold display-5 mb-2">{course.title}</h1>
-          <p className="mb-0 fs-5" style={{ opacity: 0.9 }}>
-            {course.description}
-          </p>
-        </div>
+            <div className="d-flex align-items-center gap-3 mb-3 flex-wrap">
+              <span 
+                className="badge"
+                style={{
+                  background: "rgba(255, 255, 255, 0.2)",
+                  backdropFilter: "blur(10px)",
+                  color: "white",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontWeight: "600",
+                  fontSize: "0.875rem"
+                }}
+              >
+                {/* GUNAKAN DATA DARI DB */}
+                {course.subject || "Umum"}
+              </span>
+              <span className="d-flex align-items-center gap-2 small">
+                <Users size={16} />
+                {course.teacher_name}
+              </span>
+              <span className="d-flex align-items-center gap-2 small">
+                <Users size={16} />
+                {course.student_count} siswa
+              </span>
+            </div>
+
+            <h1 className="fw-bold display-5 mb-2 text-white">{course.title}</h1>
+            <p className="mb-0 fs-5 text-white" style={{ opacity: 0.9 }}>
+              {course.description}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* CONTENT */}
@@ -741,14 +700,17 @@ export default function CourseDetail() {
 
               {/* MEMBERS TAB */}
               {activeTab === "members" && (
-                <div>
-                  <h5 className="fw-bold mb-4">👥 Anggota Kelas ({members.length})</h5>
-                  
-                  {loadingMembers ? (
-                    <div className="text-center py-5 text-muted">Memuat daftar anggota...</div>
-                  ) : (
-                    <div className="row g-3">
-                      {members.map((member) => (
+              <div>
+                <h5 className="fw-bold mb-4">👥 Anggota Kelas ({members.length})</h5>
+                
+                {loadingMembers ? (
+                  <div className="text-center py-5 text-muted">Memuat daftar anggota...</div>
+                ) : (
+                  <div className="row g-3">
+                    {members.length === 0 ? (
+                      <div className="text-center py-5">Belum ada anggota di kelas ini.</div>
+                    ) : (
+                      members.map((member) => (
                         <div key={member.id} className="col-md-6 col-lg-4">
                           <div 
                             className="card border shadow-sm h-100"
@@ -768,13 +730,14 @@ export default function CourseDetail() {
                                 style={{
                                   width: "64px",
                                   height: "64px",
+                                  // Pastikan pengecekan 'Guru' sesuai dengan data yang dikirim fetch
                                   background: member.role === "Guru" 
                                     ? "linear-gradient(135deg, #2563eb, #16a34a)" 
                                     : "linear-gradient(135deg, #9333ea, #ea580c)"
                                 }}
                               >
-                                {/* Ambil inisial dari nama yang sudah di-join tadi */}
-                                {member.name.charAt(0).toUpperCase()}
+                                {/* Inisial nama dinamis */}
+                                {member.name ? member.name.charAt(0).toUpperCase() : "?"}
                               </div>
                               <h6 className="fw-bold mb-1">{member.name}</h6>
                               <span 
@@ -791,11 +754,12 @@ export default function CourseDetail() {
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         </div>

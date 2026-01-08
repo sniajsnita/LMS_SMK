@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"; // Tambahkan useEffect
 import { Link } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../lib/supabase"; 
 import { BookOpen, Search, Users, Plus, Filter, Grid, List, Loader2 } from "lucide-react";
 
 export default function MyCourses() {
@@ -50,6 +50,7 @@ export default function MyCourses() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // 1. Ambil data membership dan detail kelas  
       const { data, error } = await supabase
         .from('course_members')
         .select(`
@@ -61,28 +62,48 @@ export default function MyCourses() {
         `)
         .eq('user_id', user.id)
         .eq('role', 'student')
-        .eq('courses.course_members.role', 'student');
+        .eq('courses.course_members.role', 'student'); // Filter count untuk siswa saja
 
       if (error) throw error;
 
+      // 2. Ambil semua ID pengajar (created_by) dari kelas yang ditemukan
+      // Kita kumpulkan ID unik agar tidak fetch berulang kali
+      const teacherIds = [...new Set(data
+        .filter(item => item.courses !== null)
+        .map(item => item.courses.created_by)
+      )].filter(id => id !== null);
+
+      // 3. Fetch data nama pengajar dari tabel profiles secara manual
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles') // Ganti dengan 'profiles' atau tabel tempat Anda menyimpan nama user
+        .select('id, full_name')
+        .in('id', teacherIds);
+
+      if (profileError) console.error("Profile Fetch Error:", profileError.message);
+
+      // 4. Gabungkan data
       const formatted = data
         .filter(item => item.courses !== null)
-        .map(item => ({
-          id: item.courses.id,
-          title: item.courses.title,
-          subject: item.courses.subject,
-          description: item.courses.description,
-          teacher: item.courses.teacher_name || "Guru Pengampu",
-          
-          // --- PERBAIKAN DI SINI ---
-          // Jangan pakai item.courses.students_count lagi, 
-          // tapi pakai hasil count dari sub-query di atas:
-          students: item.courses.course_members?.[0]?.count || 0, 
-          
-          progress: item.progress || 0,
-          coverImage: item.courses.cover_image,
-          role: item.role 
-        }));
+        .map(item => {
+          // Cari profil pengajar yang cocok dengan created_by di tabel courses
+          const instructor = profiles?.find(p => p.id === item.courses.created_by);
+
+          return {
+            id: item.courses.id,
+            title: item.courses.title,
+            subject: item.courses.subject,
+            description: item.courses.description,
+            class_code: item.courses.class_code,
+            
+            // --- NAMA GURU DINAMIS ---
+            teacher: instructor?.full_name || "Guru Pengampu", 
+            
+            students: item.courses.course_members?.[0]?.count || 0, 
+            progress: item.progress || 0,
+            coverImage: item.courses.cover_image,
+            role: item.role 
+          };
+        });
 
       setCourses(formatted);
     } catch (error) {
