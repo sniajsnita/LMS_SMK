@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"; // Tambahkan useEffect
 import { Link } from "react-router-dom";
-import { supabase } from "../lib/supabase"; // Pastikan path lib/supabase benar
+import { supabase } from "../lib/supabase";
 import { BookOpen, Search, Users, Plus, Filter, Grid, List, Loader2 } from "lucide-react";
 
 export default function MyCourses() {
