@@ -80,38 +80,68 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
 
               {/* Cover Image */}
               <div className="mb-4">
-                <label className="form-label fw-semibold mb-2">Gambar Cover (Opsional)</label>
-                <div className="d-flex gap-2">
+                <label className="form-label fw-semibold mb-2">
+                  Gambar Cover (Opsional)
+                </label>
+
+                <div className="d-flex gap-2 align-items-center">
+                  {/* Input URL manual */}
                   <input
                     type="text"
                     className="form-control border-0 shadow-sm flex-grow-1"
                     placeholder="URL gambar atau upload"
                     value={formData.cover_image}
-                    onChange={(e) => setFormData({ ...formData, cover_image: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, cover_image: e.target.value })
+                    }
                     style={{
                       borderRadius: "12px",
                       padding: "12px 16px",
-                      background: "#f8f9fa"
+                      background: "#f8f9fa",
                     }}
                   />
-                  <button 
+
+                  {/* Upload dari penyimpanan */}
+                  <label
                     className="btn btn-outline-secondary"
-                    style={{ borderRadius: "12px" }}
+                    style={{
+                      borderRadius: "12px",
+                      cursor: "pointer",
+                    }}
                   >
                     <Upload size={18} />
-                  </button>
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+
+                        const previewUrl = URL.createObjectURL(file);
+                        setFormData({ ...formData, cover_image: previewUrl });
+                      }}
+                    />
+                  </label>
                 </div>
+
+                {/* Preview */}
                 {formData.cover_image && (
                   <div className="mt-3">
-                    <img 
-                      src={formData.cover_image} 
-                      alt="Preview" 
+                    <img
+                      src={formData.cover_image}
+                      alt="Preview"
                       className="w-100 rounded-3"
-                      style={{ height: "150px", objectFit: "cover" }}
+                      style={{
+                        height: "150px",
+                        objectFit: "cover",
+                      }}
                     />
                   </div>
                 )}
               </div>
+
             </div>
 
             <div className="modal-footer border-0 pt-0">

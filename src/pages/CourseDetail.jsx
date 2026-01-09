@@ -20,6 +20,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 
+import ItemModal from "../components/course/ItemModal";
+
 export default function CourseDetail() {
   const [activeTab, setActiveTab] = useState("materials");
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -43,6 +45,11 @@ export default function CourseDetail() {
   const [replyContent, setReplyContent] = useState({});
   const [loadingDiscussions, setLoadingDiscussions] = useState(true);
   const [likes, setLikes] = useState({});
+
+  // Tambahkan di bagian state declarations
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [itemModalType, setItemModalType] = useState("");
+  const [editingItem, setEditingItem] = useState(null);
 
   const [members, setMembers] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
@@ -265,6 +272,76 @@ export default function CourseDetail() {
       } catch (err) {
         console.error("Gagal menyimpan progress:", err.message);
       }
+    }
+  };
+
+  // Handler untuk membuka modal
+const handleAddDiscussion = () => {
+  setItemModalType("discussions");
+  setEditingItem(null);
+  setShowItemModal(true);
+};
+
+  // Handler untuk menyimpan diskusi
+  const handleSaveDiscussion = async (dataFromModal) => {
+    try {
+      if (!dataFromModal?.title?.trim() || !dataFromModal?.description?.trim()) {
+        alert("❌ Judul dan deskripsi wajib diisi");
+        return false;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert("❌ Silakan login terlebih dahulu");
+        return false;
+      }
+
+      // Upload file jika ada
+      let fileUrl = null;
+      if (dataFromModal.attachmentFile) {
+        const fileName = `${Date.now()}_${dataFromModal.attachmentFile.name}`;
+        const filePath = `discussions/${id}/${fileName}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('lms-files')
+          .upload(filePath, dataFromModal.attachmentFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('lms-files')
+          .getPublicUrl(filePath);
+
+        fileUrl = publicUrl;
+      }
+
+      // Simpan ke database
+      const { data: savedData, error } = await supabase
+        .from('discussions')
+        .insert([{
+          course_id: id,
+          title: dataFromModal.title,
+          content: dataFromModal.description,
+          author: user.id,
+          file_url: fileUrl,
+          created_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      alert("✅ Diskusi berhasil dibuat!");
+      
+      // Refresh data
+      fetchAllCourseData(id);
+      
+      return true;
+
+    } catch (error) {
+      console.error("Error:", error);
+      alert("❌ Gagal menyimpan: " + error.message);
+      return false;
     }
   };
 
@@ -645,7 +722,7 @@ export default function CourseDetail() {
                   <button
                     className="btn btn-primary btn-sm"
                     style={{ borderRadius: "8px" }}
-                    onClick={() => {/* Tambahkan logika modal buat diskusi baru di sini */}}
+                    onClick={handleAddDiscussion} // ← Ubah ini
                   >
                     <Plus size={16} className="me-1" />
                     Buat Diskusi
@@ -999,6 +1076,14 @@ export default function CourseDetail() {
           />
         </>
       )}
+      {/* ITEM MODAL */}
+      <ItemModal
+        show={showItemModal}
+        type={itemModalType}
+        editingItem={editingItem}
+        onClose={() => setShowItemModal(false)}
+        onSave={handleSaveDiscussion}
+      />
     </div>
   );
 }

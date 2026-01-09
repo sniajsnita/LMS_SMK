@@ -2,6 +2,8 @@ import React from 'react';
 import { useEffect } from 'react';
 import { Upload, Link, FileText, Calendar, Clock, Users, MessageSquare } from 'lucide-react';
 
+
+
 const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
   const fileInputRef = React.useRef(null);
   const isEdit = Boolean(editingItem);
@@ -619,6 +621,107 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   resize: "none"
                 }}
               />
+            </div>
+
+            <div className="mb-4">
+              <label className="form-label fw-semibold mb-2">Kategori Diskusi</label>
+              <select
+                className="form-select border-0 shadow-sm"
+                value={formData.category || ""}
+                onChange={(e) =>
+                  setFormData(prev => ({
+                    ...prev,
+                    category: e.target.value
+                  }))
+                }
+                style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
+              >
+                <option value="">Pilih Kategori</option>
+                <option value="question">❓ Pertanyaan</option>
+                <option value="discussion">💬 Diskusi Umum</option>
+                <option value="announcement">📢 Pengumuman</option>
+                <option value="help">🆘 Bantuan</option>
+                <option value="idea">💡 Ide/Saran</option>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="form-label fw-semibold mb-2">Tag (Opsional)</label>
+              <input
+                type="text"
+                className="form-control border-0 shadow-sm"
+                placeholder="Contoh: aljabar, matematika, bab1"
+                value={formData.tags || ""}
+                onChange={(e) =>
+                  setFormData(prev => ({
+                    ...prev,
+                    tags: e.target.value
+                  }))
+                }
+                style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
+              />
+              <small className="text-muted">Pisahkan dengan koma untuk multiple tags</small>
+            </div>
+
+            <div className="mb-4">
+              <label className="form-label fw-semibold mb-2">File Lampiran (Opsional)</label>
+              <div className="input-group shadow-sm" style={{ borderRadius: "12px", overflow: "hidden" }}>
+                <input
+                  type="text"
+                  className="form-control border-0"
+                  placeholder="Upload gambar atau file pendukung"
+                  value={formData.attachmentUrl || ""}
+                  onChange={(e) =>
+                    setFormData(prev => ({
+                      ...prev,
+                      attachmentUrl: e.target.value
+                    }))
+                  }
+                  style={{ padding: "12px 16px", background: "#f8f9fa" }}
+                />
+                <button 
+                  className="btn btn-outline-secondary border-0"
+                  style={{ background: "#e5e7eb" }}
+                >
+                  <Upload size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="form-check mb-2">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="allowComments"
+                checked={formData.allowComments !== false}
+                onChange={(e) =>
+                  setFormData(prev => ({
+                    ...prev,
+                    allowComments: e.target.checked
+                  }))
+                }
+              />
+              <label className="form-check-label" htmlFor="allowComments">
+                Izinkan komentar dari siswa
+              </label>
+            </div>
+
+            <div className="form-check mb-2">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="pinned"
+                checked={formData.pinned || false}
+                onChange={(e) =>
+                  setFormData(prev => ({
+                    ...prev,
+                    pinned: e.target.checked
+                  }))
+                }
+              />
+              <label className="form-check-label" htmlFor="pinned">
+                Pin diskusi ini di atas
+              </label>
             </div>
           </>
         );
