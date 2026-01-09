@@ -460,7 +460,17 @@ export default function ManageCoursesUI() {
 
       // Field tambahan berdasarkan tipe
       if (itemModalType === "materials") {
-        payload.type = dataFromModal.type || "file";
+        // 1. Tentukan tipe: Ambil dari modal, default ke 'link' jika tidak ada file
+        payload.type = dataFromModal.type || (dataFromModal.file ? "file" : "link");
+
+        // 2. Jika tipenya link, pastikan file_url mengambil dari input text 'url'
+        if (payload.type === "link") {
+          payload.file_url = dataFromModal.link_url || dataFromModal.url;
+        }
+
+        // 3. Masukkan field tambahan untuk UI (duration & size)
+        payload.duration = dataFromModal.duration || null; // Untuk video
+        payload.size = dataFromModal.size || null;         // Untuk file
       }
       if (itemModalType === "assignments") {
         if (!dataFromModal.deadline) {
@@ -478,14 +488,27 @@ export default function ManageCoursesUI() {
           questions_count: parseInt(dataFromModal.questions) || 0,
           start_date: dataFromModal.startDate || null,
           end_date: dataFromModal.endDate || null,
-          passing_grade: parseInt(dataFromModal.passingGrade) || 0,
           attempts_limit: parseInt(dataFromModal.attempts) || 1,
-          quiz_type: dataFromModal.quizType || null,
-          randomize: dataFromModal.randomize || false,
-          show_results: dataFromModal.showResults || false
+          link: dataFromModal.link || null, // TAMBAHKAN INI (Sesuai kolom di DB)
+        };
+
+        // Pastikan file_path tidak ikut terkirim untuk kuis
+        delete payload.file_path;
+        delete payload.file_url;
+      } 
+
+      // 3. Jika tipe adalah MATERIALS atau ASSIGNMENTS (yang pake file)
+      else {
+        payload = {
+          ...payload,
+          file_path: dataFromModal.file_path, // Hanya dikirim jika bukan kuis
+          file_url: dataFromModal.file_url,
+          ...(itemModalType === "assignments" && { deadline: dataFromModal.deadline }),
+          ...(itemModalType === "materials" && { type: dataFromModal.type || "file" })
         };
       }
 
+      // 4. Validasi Tanggal (Tetap sama)
       if (itemModalType === "quizzes" && dataFromModal.startDate && dataFromModal.endDate) {
         if (new Date(dataFromModal.startDate) >= new Date(dataFromModal.endDate)) {
           alert("Tanggal selesai harus setelah tanggal mulai!");
@@ -510,7 +533,24 @@ export default function ManageCoursesUI() {
         return [savedData, ...prev];
       };
 
-      if (itemModalType === "materials") setMaterials(updateState);
+      if (itemModalType === "materials") {
+        // 1. Ambil tipe dari modal, paksa ke lowercase agar diterima Database (video/file/link)
+        let finalType = (dataFromModal.type || "").toLowerCase();
+
+        // 2. Validasi otomatis jika user lupa memilih tipe di dropdown
+        if (!['video', 'file', 'link'].includes(finalType)) {
+          finalType = (dataFromModal.file || uploadedFile) ? "file" : "link";
+        }
+        
+        payload.type = finalType;
+
+        // 3. Logika URL: Prioritaskan file hasil upload, lalu link manual, lalu data lama
+        payload.file_url = uploadedFile?.publicUrl || dataFromModal.link_url || dataFromModal.url || dataFromModal.file_url || null;
+
+        // 4. Masukkan metadata tambahan
+        payload.duration = dataFromModal.duration || null; 
+        payload.size = dataFromModal.size || null;
+      }
       if (itemModalType === "assignments") setAssignments(updateState);
       if (itemModalType === "quizzes") setQuizzes(updateState);
       if (itemModalType === "discussions") setDiscussions(updateState);

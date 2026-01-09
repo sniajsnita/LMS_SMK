@@ -1,36 +1,55 @@
-import { Trash2, Edit } from "lucide-react";
+import { Trash2, Edit, Eye, Download, PlayCircle, Link2 } from "lucide-react";
 
+const MaterialItem = ({ material, onEdit, onDelete }) => {
+  // Fungsi untuk menangani akses file agar tidak error 400
+  const handleFileAction = (url) => {
+    if (!url) return alert("Link file tidak tersedia");
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
-const MaterialItem = ({ material, onEdit, onDelete }) => (
-  <div 
-    className="list-group-item border-0 mb-2 shadow-sm"
-    style={{ borderRadius: "12px" }}
-  >
-    <div className="d-flex justify-content-between align-items-center">
-      <div>
-        <h6 className="mb-1 fw-semibold">{material.title}</h6>
-        <small className="text-muted">
-          Tipe: {material.type} • Upload: {material.uploadDate}
-        </small>
-      </div>
-      <div className="d-flex gap-2">
-        <button
-          className="btn btn-outline-primary btn-sm"
-          onClick={() => onEdit(material)}
-          style={{ borderRadius: "8px" }}
-        >
-          <Edit size={16} />
-        </button>
-        <button
-          className="btn btn-outline-danger btn-sm"
-          onClick={() => onDelete(material.id)}
-          style={{ borderRadius: "8px" }}
-        >
-          <Trash2 size={16} />
-        </button>
+  return (
+    <div 
+      className="list-group-item border-0 mb-3 shadow-sm"
+      style={{ borderRadius: "14px" }}
+    >
+      <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        
+        {/* INFO MATERI */}
+        <div className="flex-grow-1">
+          <h6 className="mb-1 fw-semibold">{material.title}</h6>
+          <small className="text-muted d-block mb-2">
+            Tipe: {material.type} • Upload: {new Date(material.created_at || material.uploadDate).toLocaleDateString('id-ID')}
+          </small>
+        </div>
+
+        {/* ACTION (EDIT/DELETE) */}
+        <div className="d-flex gap-2">
+          <button
+            className="btn btn-outline-success btn-sm"
+            onClick={() => handleFileAction(material.file_url || material.url)}
+            style={{ borderRadius: "8px" }}
+            title="Lihat"
+          >
+            <Eye size={16} />
+          </button>
+          <button
+            className="btn btn-outline-primary btn-sm"
+            onClick={() => onEdit(material)}
+            style={{ borderRadius: "8px" }}
+          >
+            <Edit size={16} />
+          </button>
+          <button
+            className="btn btn-outline-danger btn-sm"
+            onClick={() => onDelete(material.id)}
+            style={{ borderRadius: "8px" }}
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default MaterialItem;

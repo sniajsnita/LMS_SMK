@@ -10,17 +10,21 @@ const AssignmentItem = ({ assignment, onEdit, onDelete, onManageGrades }) => {
       <div className="d-flex justify-content-between align-items-center">
         <div className="flex-grow-1">
           <h6 className="mb-1 fw-semibold">{assignment.title}</h6>
-          <small className="text-muted">
-            Deadline: {assignment.deadline} • Submitted: {assignment.submitted || 0}/{assignment.total || 0}
-          </small>
-          {assignment.description && (
+          {assignment.description ? (
             <p className="text-muted small mb-0 mt-1" style={{ fontSize: "0.85rem" }}>
               {assignment.description.length > 100 
                 ? `${assignment.description.substring(0, 100)}...` 
                 : assignment.description
               }
             </p>
+          ) : (
+            <p className="text-muted small mb-0 mt-1 italic" style={{ fontSize: "0.85rem", fontStyle: 'italic' }}>
+              Tidak ada deskripsi tugas.
+            </p>
           )}
+          <small className="text-muted">
+            Deadline: {assignment.deadline} • Submitted: {assignment.submitted || 0}/{assignment.total || 0}
+          </small>
         </div>
         <div className="d-flex gap-2 ms-3">
           {/* Tombol Kelola Nilai */}

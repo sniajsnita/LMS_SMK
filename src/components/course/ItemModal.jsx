@@ -6,8 +6,11 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
   const fileInputRef = React.useRef(null);
   const isEdit = Boolean(editingItem);
   useEffect(() => {
+    // Hanya jalankan logika jika modal dalam keadaan terbuka (show === true)
+    if (!show) return;
+
     if (editingItem) {
-      // 1. Logika untuk DATA UMUM (semua tipe punya ini)
+      // 1. Logika untuk DATA UMUM
       const baseData = {
         title: editingItem.title || "",
         description: editingItem.description || "",
@@ -33,18 +36,17 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
       } else if (type === "assignments") {
         setFormData({
           ...baseData,
-          deadline: editingItem.deadline || "",
+          deadline: editingItem.deadline ? editingItem.deadline.substring(0, 10) : "",
         });
       } else if (type === "materials") {
         setFormData({
           ...baseData,
-          type: editingItem.type || "file",
+          // PERBAIKAN: Memastikan 'type' materi sesuai constraint DB ('file', 'video', 'link')
+          type: editingItem.type || "file", 
         });
       } else {
-        // Default untuk tipe lain (misal discussion)
         setFormData(baseData);
       }
-
     } else {
       // 3. Reset form jika mode TAMBAH BARU
       setFormData({ 
@@ -61,11 +63,12 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
         quizType: "",
         randomize: false,
         showResults: false,
-        attachmentUrl: ""
+        attachmentUrl: "",
+        // Pastikan saat tambah baru, material type default-nya valid
+        type: type === "materials" ? "file" : "" 
       });
     }
-  }, [editingItem, show, type]); // Tambahkan 'type' di dependency array // Modal akan terisi setiap kali editingItem berubah atau modal dibuka
-  const safeType = type || "item";
+  }, [editingItem, show, type]);
 
   const [formData, setFormData] = React.useState({});
 
@@ -151,10 +154,10 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                 style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
               >
                 <option value="">Pilih Tipe Materi</option>
-                <option value="pdf">📄 PDF Document</option>
+                <option value="file">📄 PDF Document</option>
                 <option value="video">🎥 Video</option>
-                <option value="ppt">📊 PowerPoint</option>
-                <option value="doc">📝 Dokumen Word</option>
+                <option value="file">📊 PowerPoint</option>
+                <option value="file">📝 Dokumen Word</option>
                 <option value="link">🔗 Link Eksternal</option>
               </select>
             </div>
@@ -165,49 +168,69 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                 URL / File
               </label>
 
-              <div className="input-group shadow-sm" style={{ borderRadius: "12px", overflow: "hidden" }}>
-                {/* INPUT TEXT (DISPLAY) */}
+              <div
+                className="input-group shadow-sm"
+                style={{ borderRadius: "12px", overflow: "hidden" }}
+              >
+                {/* INPUT URL / FILE NAME */}
                 <input
                   type="text"
                   className="form-control border-0"
-                  placeholder="https://... atau upload file"
+                  placeholder={
+                    formData.type === "link"
+                      ? "https://contoh-link.com"
+                      : "Upload file materi"
+                  }
                   value={formData.url || ""}
-                  readOnly
+                  readOnly={formData.type !== "link"}   // ✅ KUNCI LOGIC
+                  onChange={(e) =>
+                    setFormData(prev => ({
+                      ...prev,
+                      url: e.target.value
+                    }))
+                  }
                   style={{ background: "#f8f9fa" }}
                 />
 
                 {/* INPUT FILE (HIDDEN) */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  hidden
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
+                {formData.type !== "link" && (
+                  <>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      hidden
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
 
-                    setFormData(prev => ({
-                      ...prev,
-                      file,        // FILE ASLI
-                      url: file.name // UNTUK DISPLAY
-                    }));
-                  }}
-                />
+                        setFormData(prev => ({
+                          ...prev,
+                          file,          // FILE ASLI
+                          url: file.name // DISPLAY NAMA FILE
+                        }));
+                      }}
+                    />
 
-                {/* BUTTON UPLOAD */}
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary border-0"
-                  style={{ background: "#e5e7eb" }}
-                  onClick={() => fileInputRef.current.click()}
-                >
-                  <Upload size={18} />
-                </button>
+                    {/* BUTTON UPLOAD */}
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary border-0"
+                      style={{ background: "#e5e7eb" }}
+                      onClick={() => fileInputRef.current.click()}
+                    >
+                      <Upload size={18} />
+                    </button>
+                  </>
+                )}
               </div>
 
               <small className="text-muted">
-                Masukkan URL atau klik upload untuk memilih file
+                {formData.type === "link"
+                  ? "Masukkan link materi (YouTube, Google Drive, dll)"
+                  : "Klik upload untuk memilih file materi"}
               </small>
             </div>
+
 
             <div className="row">
               <div className="col-md-6 mb-3">
@@ -230,7 +253,7 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   <option value="latihan">✍️ Latihan</option>
                 </select>
               </div>
-              <div className="col-md-6 mb-3">
+              {/* <div className="col-md-6 mb-3">
                 <label className="form-label fw-semibold mb-2">Durasi Baca (menit)</label>
                 <input
                   type="number"
@@ -245,7 +268,7 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   }
                   style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
                 />
-              </div>
+              </div> */}
             </div>
           </>
         );
@@ -332,64 +355,6 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
                 />
               </div>
-            </div>
-
-            <div className="row mb-4">
-              <div className="col-md-6 mb-3 mb-md-0">
-                <label className="form-label fw-semibold mb-2">Bobot Nilai (%)</label>
-                <input
-                  type="number"
-                  className="form-control border-0 shadow-sm"
-                  placeholder="20"
-                  min="0"
-                  max="100"
-                  value={formData.weight || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      weight: e.target.value
-                    }))
-                  }
-                  style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-                />
-              </div>
-              <div className="col-md-6">
-                <label className="form-label fw-semibold mb-2">Nilai Maksimal</label>
-                <input
-                  type="number"
-                  className="form-control border-0 shadow-sm"
-                  placeholder="100"
-                  value={formData.maxScore || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      maxScore: e.target.value
-                    }))
-                  }
-                  style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-                />
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="form-label fw-semibold mb-2">Tipe Pengumpulan</label>
-              <select
-                className="form-select border-0 shadow-sm"
-                value={formData.submissionType || ""}
-                onChange={(e) =>
-                  setFormData(prev => ({
-                    ...prev,
-                    submissionType: e.target.value
-                  }))
-                }
-                style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-              >
-                <option value="">Pilih Tipe</option>
-                <option value="file">📎 Upload File</option>
-                <option value="text">📝 Text Editor</option>
-                <option value="link">🔗 Submit Link</option>
-                <option value="quiz">✅ Multiple Choice</option>
-              </select>
             </div>
 
             <div className="mb-3">
@@ -568,24 +533,6 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
             </div>
 
             <div className="row mb-4">
-              <div className="col-md-6 mb-3 mb-md-0">
-                <label className="form-label fw-semibold mb-2">Passing Grade (%)</label>
-                <input
-                  type="number"
-                  className="form-control border-0 shadow-sm"
-                  placeholder="70"
-                  min="0"
-                  max="100"
-                  value={formData.passingGrade || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      passingGrade: e.target.value
-                    }))
-                  }
-                  style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-                />
-              </div>
               <div className="col-md-6">
                 <label className="form-label fw-semibold mb-2">Jumlah Percobaan</label>
                 <input
@@ -606,60 +553,30 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
             </div>
 
             <div className="mb-4">
-              <label className="form-label fw-semibold mb-2">Tipe Kuis</label>
-              <select
-                className="form-select border-0 shadow-sm"
-                value={formData.quizType || ""}
-                onChange={(e) =>
-                  setFormData(prev => ({
-                    ...prev,
-                    quizType: e.target.value
-                  }))
-                }
-                style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-              >
-                <option value="">Pilih Tipe</option>
-                <option value="multiple">✓ Multiple Choice</option>
-                <option value="essay">📝 Essay</option>
-                <option value="mixed">🔀 Campuran</option>
-                <option value="truefalse">✓✗ True/False</option>
-              </select>
-            </div>
-
-            <div className="form-check mb-2">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id="randomize"
-                checked={formData.randomize || false}
-                onChange={(e) =>
-                  setFormData(prev => ({
-                    ...prev,
-                    randomize: e.target.checked
-                  }))
-                }
-              />
-              <label className="form-check-label" htmlFor="randomize">
-                Acak urutan soal
+              <label className="form-label fw-semibold mb-2">
+                <Link size={16} className="me-2" />
+                Link Kuis
               </label>
-            </div>
-
-            <div className="form-check mb-2">
               <input
-                className="form-check-input"
-                type="checkbox"
-                id="showResults"
-                checked={formData.showResults || false}
+                type="url"
+                className="form-control border-0 shadow-sm"
+                placeholder="https://contoh.com/kuis"
+                value={formData.link || ""}
                 onChange={(e) =>
                   setFormData(prev => ({
                     ...prev,
-                    showResults: e.target.checked
+                    link: e.target.value
                   }))
                 }
+                style={{ 
+                  borderRadius: "12px", 
+                  padding: "12px 16px", 
+                  background: "#f8f9fa" 
+                }}
               />
-              <label className="form-check-label" htmlFor="showResults">
-                Tampilkan hasil setelah selesai
-              </label>
+              <small className="text-muted">
+                Isi dengan link kuis platform eksternal (Google Form, dll)
+              </small>
             </div>
           </>
         );
