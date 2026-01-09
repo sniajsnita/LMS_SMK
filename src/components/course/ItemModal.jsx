@@ -2,6 +2,8 @@ import React from 'react';
 import { useEffect } from 'react';
 import { Upload, Link, FileText, Calendar, Clock, Users, MessageSquare } from 'lucide-react';
 
+
+
 const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
   const fileInputRef = React.useRef(null);
   const isEdit = Boolean(editingItem);
@@ -626,7 +628,7 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
               />
             </div>
 
-            <div className="mb-4">
+            {/* <div className="mb-4">
               <label className="form-label fw-semibold mb-2">Kategori Diskusi</label>
               <select
                 className="form-select border-0 shadow-sm"
@@ -646,9 +648,9 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                 <option value="help">🆘 Bantuan</option>
                 <option value="idea">💡 Ide/Saran</option>
               </select>
-            </div>
+            </div> */}
 
-            <div className="mb-4">
+            {/* <div className="mb-4">
               <label className="form-label fw-semibold mb-2">Tag (Opsional)</label>
               <input
                 type="text"
@@ -664,34 +666,57 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                 style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
               />
               <small className="text-muted">Pisahkan dengan koma untuk multiple tags</small>
-            </div>
+            </div> */}
 
             <div className="mb-4">
-              <label className="form-label fw-semibold mb-2">File Lampiran (Opsional)</label>
-              <div className="input-group shadow-sm" style={{ borderRadius: "12px", overflow: "hidden" }}>
+              <label className="form-label fw-semibold mb-2">
+                File Lampiran (Opsional)
+              </label>
+
+              <div
+                className="input-group shadow-sm"
+                style={{ borderRadius: "12px", overflow: "hidden" }}
+              >
+                {/* Input tampil (readonly) */}
                 <input
                   type="text"
                   className="form-control border-0"
                   placeholder="Upload gambar atau file pendukung"
-                  value={formData.attachmentUrl || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      attachmentUrl: e.target.value
-                    }))
-                  }
+                  value={formData.attachmentName || ""}
+                  readOnly
                   style={{ padding: "12px 16px", background: "#f8f9fa" }}
                 />
-                <button 
+
+                {/* Tombol upload */}
+                <button
+                  type="button"
                   className="btn btn-outline-secondary border-0"
                   style={{ background: "#e5e7eb" }}
+                  onClick={() => fileInputRef.current.click()}
                 >
                   <Upload size={18} />
                 </button>
               </div>
+
+              {/* Input file asli (hidden) */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="d-none"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      attachmentFile: file,
+                      attachmentName: file.name,
+                    }));
+                  }
+                }}
+              />
             </div>
 
-            <div className="form-check mb-2">
+            {/* <div className="form-check mb-2">
               <input
                 className="form-check-input"
                 type="checkbox"
@@ -707,9 +732,9 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
               <label className="form-check-label" htmlFor="allowComments">
                 Izinkan komentar dari siswa
               </label>
-            </div>
+            </div> */}
 
-            <div className="form-check mb-2">
+            {/* <div className="form-check mb-2">
               <input
                 className="form-check-input"
                 type="checkbox"
@@ -725,7 +750,7 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
               <label className="form-check-label" htmlFor="pinned">
                 Pin diskusi ini di atas
               </label>
-            </div>
+            </div> */}
           </>
         );
       
