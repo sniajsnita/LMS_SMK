@@ -278,25 +278,22 @@ export default function ManageCoursesUI() {
     const { data, error } = await supabase
       .from("discussions")
       .select(`
-        id,
-        title,
-        content,
-        created_at,
-        profiles (
-          full_name
-        )
+        *,
+        profiles:user_id (full_name), -- Mengambil nama pembuat diskusi
+        discussion_replies (id)       -- Mengambil semua balasan untuk dihitung
       `)
       .eq("course_id", selectedCourse.id)
       .order("created_at", { ascending: false });
 
-    if (!error) {
+    if (!error && data) {
       setDiscussions(
         data.map((d) => ({
-          id: d.id,
-          title: d.title,
+          ...d,
           author: d.profiles?.full_name || "User",
-          date: d.created_at,
-          content: d.content,
+          date: new Date(d.created_at).toLocaleDateString('id-ID'),
+          content: d.description,
+          // Menghitung jumlah balasan secara otomatis
+          repliesCount: d.discussion_replies ? d.discussion_replies.length : 0 
         }))
       );
     }
@@ -329,11 +326,38 @@ export default function ManageCoursesUI() {
     setLikes((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   };
 
-  const handleReplyDiscussion = (id) => {
-    const reply = replyContent[id];
-    if (!reply || !reply.trim()) return;
-    alert(`Komentar dikirim: ${reply}`);
-    setReplyContent({ ...replyContent, [id]: "" });
+  const handleReplyDiscussion = async (discussionId) => {
+    const content = replyContent[discussionId];
+    if (!content || !content.trim()) return;
+
+    // 1. Dapatkan user yang sedang login
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert("Anda harus login untuk membalas");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('discussion_replies')
+        .insert([
+          { 
+            discussion_id: discussionId, 
+            content: content,
+            user_id: user.id // Pastikan ini dikirim
+          }
+        ]);
+
+      if (error) throw error;
+
+      setReplyContent({ ...replyContent, [discussionId]: "" });
+      
+      // Refresh data agar balasan muncul & jumlah bertambah
+      fetchDiscussions(); 
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   const handleReplyChange = (id, value) => {

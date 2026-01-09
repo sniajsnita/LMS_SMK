@@ -151,10 +151,8 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                 style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
               >
                 <option value="">Pilih Tipe Materi</option>
-                <option value="file">📄 PDF Document</option>
+                <option value="file">📄 PDF, Word, PPTX, Dan Lainnya</option>
                 <option value="video">🎥 Video</option>
-                <option value="file">📊 PowerPoint</option>
-                <option value="file">📝 Dokumen Word</option>
                 <option value="link">🔗 Link Eksternal</option>
               </select>
             </div>
@@ -226,46 +224,6 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   ? "Masukkan link materi (YouTube, Google Drive, dll)"
                   : "Klik upload untuk memilih file materi"}
               </small>
-            </div>
-
-
-            <div className="row">
-              <div className="col-md-6 mb-3">
-                <label className="form-label fw-semibold mb-2">Kategori</label>
-                <select
-                  className="form-select border-0 shadow-sm"
-                  value={formData.category || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      category: e.target.value
-                    }))
-                  }
-                  style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-                >
-                  <option value="">Pilih Kategori</option>
-                  <option value="teori">📚 Teori</option>
-                  <option value="praktik">🛠️ Praktik</option>
-                  <option value="referensi">📖 Referensi</option>
-                  <option value="latihan">✍️ Latihan</option>
-                </select>
-              </div>
-              {/* <div className="col-md-6 mb-3">
-                <label className="form-label fw-semibold mb-2">Durasi Baca (menit)</label>
-                <input
-                  type="number"
-                  className="form-control border-0 shadow-sm"
-                  placeholder="30"
-                  value={formData.duration || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      duration: e.target.value
-                    }))
-                  }
-                  style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-                />
-              </div> */}
             </div>
           </>
         );
@@ -621,107 +579,6 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   resize: "none"
                 }}
               />
-            </div>
-
-            <div className="mb-4">
-              <label className="form-label fw-semibold mb-2">Kategori Diskusi</label>
-              <select
-                className="form-select border-0 shadow-sm"
-                value={formData.category || ""}
-                onChange={(e) =>
-                  setFormData(prev => ({
-                    ...prev,
-                    category: e.target.value
-                  }))
-                }
-                style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-              >
-                <option value="">Pilih Kategori</option>
-                <option value="question">❓ Pertanyaan</option>
-                <option value="discussion">💬 Diskusi Umum</option>
-                <option value="announcement">📢 Pengumuman</option>
-                <option value="help">🆘 Bantuan</option>
-                <option value="idea">💡 Ide/Saran</option>
-              </select>
-            </div>
-
-            <div className="mb-4">
-              <label className="form-label fw-semibold mb-2">Tag (Opsional)</label>
-              <input
-                type="text"
-                className="form-control border-0 shadow-sm"
-                placeholder="Contoh: aljabar, matematika, bab1"
-                value={formData.tags || ""}
-                onChange={(e) =>
-                  setFormData(prev => ({
-                    ...prev,
-                    tags: e.target.value
-                  }))
-                }
-                style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
-              />
-              <small className="text-muted">Pisahkan dengan koma untuk multiple tags</small>
-            </div>
-
-            <div className="mb-4">
-              <label className="form-label fw-semibold mb-2">File Lampiran (Opsional)</label>
-              <div className="input-group shadow-sm" style={{ borderRadius: "12px", overflow: "hidden" }}>
-                <input
-                  type="text"
-                  className="form-control border-0"
-                  placeholder="Upload gambar atau file pendukung"
-                  value={formData.attachmentUrl || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      attachmentUrl: e.target.value
-                    }))
-                  }
-                  style={{ padding: "12px 16px", background: "#f8f9fa" }}
-                />
-                <button 
-                  className="btn btn-outline-secondary border-0"
-                  style={{ background: "#e5e7eb" }}
-                >
-                  <Upload size={18} />
-                </button>
-              </div>
-            </div>
-
-            <div className="form-check mb-2">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id="allowComments"
-                checked={formData.allowComments !== false}
-                onChange={(e) =>
-                  setFormData(prev => ({
-                    ...prev,
-                    allowComments: e.target.checked
-                  }))
-                }
-              />
-              <label className="form-check-label" htmlFor="allowComments">
-                Izinkan komentar dari siswa
-              </label>
-            </div>
-
-            <div className="form-check mb-2">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id="pinned"
-                checked={formData.pinned || false}
-                onChange={(e) =>
-                  setFormData(prev => ({
-                    ...prev,
-                    pinned: e.target.checked
-                  }))
-                }
-              />
-              <label className="form-check-label" htmlFor="pinned">
-                Pin diskusi ini di atas
-              </label>
             </div>
           </>
         );

@@ -58,10 +58,11 @@ const DiscussionItem = ({
                 ❤️ {likes[discussion.id] || 0}
               </button>
 
-              <span className="d-flex align-items-center gap-2">
+              {/* Di dalam DiscussionItem.jsx */}
+              <div className="d-flex align-items-center gap-1">
                 <MessageSquare size={16} />
-                {discussion.replies || 0} balasan
-              </span>
+                <span>{discussion.repliesCount || 0} Balasan</span>
+              </div>
             </div>
 
             <div className="d-flex gap-2">
