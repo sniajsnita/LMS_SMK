@@ -274,28 +274,74 @@ export default function ManageCoursesUI() {
     }
   };
 
+  // FUNGSI FETCH DATA
   const fetchDiscussions = async () => {
-    const { data, error } = await supabase
-      .from("discussions")
-      .select(`
-        *,
-        profiles:user_id (full_name), -- Mengambil nama pembuat diskusi
-        discussion_replies (id)       -- Mengambil semua balasan untuk dihitung
-      `)
-      .eq("course_id", selectedCourse.id)
-      .order("created_at", { ascending: false });
+    try {
+      // 1. Ambil user yang sedang login saat ini
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-    if (!error && data) {
-      setDiscussions(
-        data.map((d) => ({
+      const { data, error } = await supabase
+        .from("discussions")
+        .select(`
+          *,
+          profiles:user_id(full_name),
+          discussion_likes(user_id), 
+          allReplies:discussion_replies(
+            *,
+            profiles:user_id(full_name)
+          )
+        `)
+        .eq("course_id", selectedCourse.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const formatted = data.map(d => {
+        // 2. LOGIKA KRUSIAL: Cek apakah ID user kita ada di dalam array discussion_likes
+        // Kita gunakan optional chaining (?.) untuk menghindari error jika data kosong
+        const userHasLiked = d.discussion_likes?.some(
+          (like) => like.user_id === currentUser?.id
+        );
+
+        return {
           ...d,
           author: d.profiles?.full_name || "User",
-          date: new Date(d.created_at).toLocaleDateString('id-ID'),
-          content: d.description,
-          // Menghitung jumlah balasan secara otomatis
-          repliesCount: d.discussion_replies ? d.discussion_replies.length : 0 
-        }))
-      );
+          likesCount: d.discussion_likes?.length || 0,
+          isLiked: !!userHasLiked, // Mengubah hasil (true/false) menjadi boolean pasti
+          repliesCount: d.allReplies?.length || 0,
+          allReplies: d.allReplies || []
+        };
+      });
+
+      setDiscussions(formatted);
+    } catch (err) {
+      console.error("Fetch Error:", err.message);
+    }
+  };
+
+  // FUNGSI KIRIM BALASAN
+  const handleReplyDiscussion = async (discussionId) => {
+    const content = replyContent[discussionId];
+    if (!content || !content.trim()) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert("Silakan login dahulu");
+
+    const { error } = await supabase
+      .from("discussion_replies")
+      .insert([
+        { 
+          discussion_id: discussionId, 
+          content: content, 
+          user_id: user.id 
+        }
+      ]);
+
+    if (!error) {
+      setReplyContent(prev => ({ ...prev, [discussionId]: "" }));
+      fetchDiscussions(); // Refresh otomatis agar balasan muncul
+    } else {
+      alert("Gagal membalas: " + error.message);
     }
   };
 
@@ -322,46 +368,86 @@ export default function ManageCoursesUI() {
     alert(`✅ Kode kelas ${code} berhasil disalin!`);
   };
 
-  const handleLikeDiscussion = (id) => {
-    setLikes((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+  const handleLikeDiscussion = async (discussionId) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return alert("Silakan login untuk memberikan like");
+
+      // 1. Cari tahu apakah user sudah like (cek di tabel discussion_likes)
+      const { data: existingLike, error: fetchError } = await supabase
+        .from("discussion_likes")
+        .select("id")
+        .eq("discussion_id", discussionId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (existingLike) {
+        // --- PROSES UNLIKE ---
+        const { error: deleteError } = await supabase
+          .from("discussion_likes")
+          .delete()
+          .eq("id", existingLike.id);
+
+        if (deleteError) throw deleteError;
+      } else {
+        // --- PROSES LIKE ---
+        const { error: insertError } = await supabase
+          .from("discussion_likes")
+          .insert([{ discussion_id: discussionId, user_id: user.id }]);
+
+        if (insertError) throw insertError;
+      }
+
+      // 2. REFRESH DATA (Penting!)
+      // Setelah insert/delete berhasil, panggil fetchDiscussions 
+      // agar variabel 'isLiked' dan 'likesCount' dihitung ulang oleh database
+      await fetchDiscussions();
+
+    } catch (error) {
+      console.error("Gagal like:", error.message);
+    }
   };
 
-  const handleReplyDiscussion = async (discussionId) => {
-    const content = replyContent[discussionId];
-    if (!content || !content.trim()) return;
-
-    // 1. Dapatkan user yang sedang login
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      alert("Anda harus login untuk membalas");
-      return;
-    }
+  // --- FUNGSI EDIT BALASAN ---
+  const handleEditReply = async (replyId, newContent) => {
+    if (!newContent || !newContent.trim()) return;
 
     try {
       const { error } = await supabase
-        .from('discussion_replies')
-        .insert([
-          { 
-            discussion_id: discussionId, 
-            content: content,
-            user_id: user.id // Pastikan ini dikirim
-          }
-        ]);
+        .from("discussion_replies")
+        .update({ content: newContent })
+        .eq("id", replyId);
 
       if (error) throw error;
 
-      setReplyContent({ ...replyContent, [discussionId]: "" });
-      
-      // Refresh data agar balasan muncul & jumlah bertambah
-      fetchDiscussions(); 
-    } catch (error) {
-      alert(error.message);
+      // Refresh data agar UI terupdate
+      await fetchDiscussions();
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengedit balasan");
     }
   };
 
-  const handleReplyChange = (id, value) => {
-    setReplyContent({ ...replyContent, [id]: value });
+  // --- FUNGSI HAPUS BALASAN ---
+  const handleDeleteReply = async (replyId) => {
+    if (!window.confirm("Hapus balasan ini?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("discussion_replies")
+        .delete()
+        .eq("id", replyId);
+
+      if (error) throw error;
+
+      // Refresh data agar UI terupdate
+      await fetchDiscussions();
+    } catch (err) {
+      console.error(err);
+      alert("Gagal menghapus balasan");
+    }
   };
 
   const handleMemberAction = (memberId, action) => {
@@ -394,30 +480,21 @@ export default function ManageCoursesUI() {
     setShowItemModal(true);
   };
 
-  //handle upload file
+  // --- FUNGSI UPLOAD ---
   const uploadFileToSupabase = async ({ file, courseId, type }) => {
     if (!file || !file.name) return null;
-
     const ext = file.name.split(".").pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const filePath = `${type}/${courseId}/${fileName}`;
 
-    const { error } = await supabase.storage
-      .from("lms-files")
-      .upload(filePath, file);
-
+    const { error } = await supabase.storage.from("lms-files").upload(filePath, file);
     if (error) throw error;
 
-    const { data } = supabase.storage
-      .from("lms-files")
-      .getPublicUrl(filePath);
-
-    return {
-      publicUrl: data.publicUrl,
-      path: filePath,
-    };
+    const { data } = supabase.storage.from("lms-files").getPublicUrl(filePath);
+    return { publicUrl: data.publicUrl, path: filePath };
   };
 
+  // --- FUNGSI INSERT/UPDATE ---
   const insertItemByType = async ({ type, payload }) => {
     const tableMap = {
       materials: "materials",
@@ -425,39 +502,31 @@ export default function ManageCoursesUI() {
       quizzes: "quizzes",
       discussions: "discussions",
     };
-
     const table = tableMap[type];
     if (!table) throw new Error("Invalid item type");
 
-    // Gunakan .upsert agar jika payload memiliki 'id', Supabase melakukan UPDATE
     const { data, error } = await supabase
       .from(table)
-      .upsert(payload) 
-      .select()
+      .upsert(payload)
+      .select(type === "discussions" ? "*, profiles:user_id(full_name)" : "*")
       .single();
 
     if (error) throw error;
     return data;
   };
 
+  // --- HANDLER SAVE ---
   const handleSaveItem = async (dataFromModal) => {
     try {
-      // 1. Validasi Input
-      if (!dataFromModal?.title?.trim()) {
-        alert("Judul wajib diisi");
-        return;
-      }
-
-      if (!selectedCourse) {
-        alert("Course tidak ditemukan");
-        return;
-      }
+      if (!dataFromModal?.title?.trim()) return alert("Judul wajib diisi");
+      if (!selectedCourse) return alert("Course tidak ditemukan");
 
       setIsUploading(true);
+      const { data: { user } } = await supabase.auth.getUser();
 
-      // 2. Upload File jika ada perubahan/file baru
       let uploadedFile = null;
-      if (dataFromModal.file instanceof File) {
+      const needsFile = itemModalType === "materials" || itemModalType === "assignments";
+      if (needsFile && dataFromModal.file instanceof File) {
         uploadedFile = await uploadFileToSupabase({
           file: dataFromModal.file,
           courseId: selectedCourse.id,
@@ -465,125 +534,57 @@ export default function ManageCoursesUI() {
         });
       }
 
-      // 3. Susun Payload (Satu-satunya sumber kebenaran data)
       let payload = {
         course_id: selectedCourse.id,
         title: dataFromModal.title,
         description: dataFromModal.description || null,
-        // Gunakan URL baru jika ada upload, jika tidak gunakan URL lama yang sudah ada
-        file_url: uploadedFile?.publicUrl || dataFromModal.file_url || null,
-        file_path: uploadedFile?.path || dataFromModal.file_path || null,
       };
 
-      // LOGIKA EDIT: Sertakan ID jika sedang mengedit agar tidak membuat data baru
-      if (editingItem?.id) {
-        payload.id = editingItem.id;
-      } else {
-        payload.created_at = new Date();
+      if (editingItem?.id) payload.id = editingItem.id;
+
+      if (itemModalType === "discussions") {
+        payload.user_id = user.id;
+        delete payload.file_url;
+        delete payload.file_path;
+      } 
+      else if (itemModalType === "materials") {
+        let finalType = (dataFromModal.type || "").toLowerCase();
+        payload.type = finalType || (dataFromModal.file ? "file" : "link");
+        payload.file_url = uploadedFile?.publicUrl || dataFromModal.link_url || dataFromModal.url || dataFromModal.file_url || null;
+        payload.file_path = uploadedFile?.path || dataFromModal.file_path || null;
       }
-
-      // Field tambahan berdasarkan tipe
-      if (itemModalType === "materials") {
-        // 1. Tentukan tipe: Ambil dari modal, default ke 'link' jika tidak ada file
-        payload.type = dataFromModal.type || (dataFromModal.file ? "file" : "link");
-
-        // 2. Jika tipenya link, pastikan file_url mengambil dari input text 'url'
-        if (payload.type === "link") {
-          payload.file_url = dataFromModal.link_url || dataFromModal.url;
-        }
-
-        // 3. Masukkan field tambahan untuk UI (duration & size)
-        payload.duration = dataFromModal.duration || null; // Untuk video
-        payload.size = dataFromModal.size || null;         // Untuk file
-      }
-      if (itemModalType === "assignments") {
-        if (!dataFromModal.deadline) {
-          alert("Deadline wajib diisi");
-          setIsUploading(false); // Reset loading jika gagal validasi
-          return;
-        }
+      else if (itemModalType === "assignments") {
+        if (!dataFromModal.deadline) throw new Error("Deadline wajib diisi");
         payload.deadline = dataFromModal.deadline;
+        payload.file_url = uploadedFile?.publicUrl || dataFromModal.file_url || null;
+        payload.file_path = uploadedFile?.path || dataFromModal.file_path || null;
       }
-
-      if (itemModalType === "quizzes") {
-        payload = {
-          ...payload,
-          duration: dataFromModal.duration || null,
-          questions_count: parseInt(dataFromModal.questions) || 0,
-          start_date: dataFromModal.startDate || null,
-          end_date: dataFromModal.endDate || null,
-          attempts_limit: parseInt(dataFromModal.attempts) || 1,
-          link: dataFromModal.link || null, // TAMBAHKAN INI (Sesuai kolom di DB)
-        };
-
-        // Pastikan file_path tidak ikut terkirim untuk kuis
+      else if (itemModalType === "quizzes") {
+        payload.duration = dataFromModal.duration || null;
+        payload.questions_count = parseInt(dataFromModal.questions) || 0;
+        payload.start_date = dataFromModal.startDate || null;
+        payload.end_date = dataFromModal.endDate || null;
+        payload.attempts_limit = parseInt(dataFromModal.attempts) || 1;
+        payload.link = dataFromModal.link || null;
         delete payload.file_path;
         delete payload.file_url;
-      } 
-
-      // 3. Jika tipe adalah MATERIALS atau ASSIGNMENTS (yang pake file)
-      else {
-        payload = {
-          ...payload,
-          file_path: dataFromModal.file_path, // Hanya dikirim jika bukan kuis
-          file_url: dataFromModal.file_url,
-          ...(itemModalType === "assignments" && { deadline: dataFromModal.deadline }),
-          ...(itemModalType === "materials" && { type: dataFromModal.type || "file" })
-        };
       }
 
-      // 4. Validasi Tanggal (Tetap sama)
-      if (itemModalType === "quizzes" && dataFromModal.startDate && dataFromModal.endDate) {
-        if (new Date(dataFromModal.startDate) >= new Date(dataFromModal.endDate)) {
-          alert("Tanggal selesai harus setelah tanggal mulai!");
-          return;
-        }
-      }
+      const savedData = await insertItemByType({ type: itemModalType, payload });
 
-      // 4. Proses Simpan (Cukup panggil fungsi helper ini saja)
-      // Fungsi helper ini sudah diperbaiki di bawah (poin B)
-      const savedData = await insertItemByType({
-        type: itemModalType,
-        payload,
-      });
-
-      // 5. Update UI (Cegah Duplikasi tampilan)
       const updateState = (prev) => {
-        if (editingItem) {
-          // Ganti data lama dengan data baru yang sudah di-update
-          return prev.map((item) => (item.id === editingItem.id ? savedData : item));
-        }
-        // Tambah data baru ke atas daftar
+        if (editingItem) return prev.map((item) => (item.id === editingItem.id ? { ...item, ...savedData } : item));
         return [savedData, ...prev];
       };
 
-      if (itemModalType === "materials") {
-        // 1. Ambil tipe dari modal, paksa ke lowercase agar diterima Database (video/file/link)
-        let finalType = (dataFromModal.type || "").toLowerCase();
-
-        // 2. Validasi otomatis jika user lupa memilih tipe di dropdown
-        if (!['video', 'file', 'link'].includes(finalType)) {
-          finalType = (dataFromModal.file || uploadedFile) ? "file" : "link";
-        }
-        
-        payload.type = finalType;
-
-        // 3. Logika URL: Prioritaskan file hasil upload, lalu link manual, lalu data lama
-        payload.file_url = uploadedFile?.publicUrl || dataFromModal.link_url || dataFromModal.url || dataFromModal.file_url || null;
-
-        // 4. Masukkan metadata tambahan
-        payload.duration = dataFromModal.duration || null; 
-        payload.size = dataFromModal.size || null;
-      }
+      if (itemModalType === "materials") setMaterials(updateState);
       if (itemModalType === "assignments") setAssignments(updateState);
       if (itemModalType === "quizzes") setQuizzes(updateState);
-      if (itemModalType === "discussions") setDiscussions(updateState);
+      if (itemModalType === "discussions") await fetchDiscussions();
 
-      // 6. Reset UI
       setShowItemModal(false);
-      setEditingItem(null); 
+      setEditingItem(null);
       alert("✅ Berhasil disimpan");
-      
     } catch (err) {
       console.error(err);
       alert(err.message || "Gagal menyimpan");
@@ -592,28 +593,17 @@ export default function ManageCoursesUI() {
     }
   };
 
+  // --- HANDLER DELETE (PASTIKAN ASYNC DAN TERBUNGKUS BENAR) ---
   const handleDeleteItem = async ({ item, type }) => {
     if (!window.confirm("Yakin ingin menghapus item ini?")) return;
-
+    
     try {
-      // DELETE STORAGE (JIKA ADA FILE)
+      // 1. Delete Storage jika ada
       if (item.file_path) {
-        const { error: storageError } = await supabase.storage
-          .from("lms-files")
-          .remove([item.file_path]);
-
-        if (storageError) {
-          console.error(storageError);
-          alert("Gagal menghapus file");
-          return;
-        }
-      }
-      
-      if (item?.file_path) { 
         await supabase.storage.from("lms-files").remove([item.file_path]);
       }
 
-      // DELETE DATABASE
+      // 2. Delete Database
       const tableMap = {
         materials: "materials",
         assignments: "assignments",
@@ -628,16 +618,17 @@ export default function ManageCoursesUI() {
 
       if (error) throw error;
 
-      // UPDATE UI
-      if (type === "materials") setMaterials(p => p.filter(i => i.id !== item.id));
-      if (type === "assignments") setAssignments(p => p.filter(i => i.id !== item.id));
-      if (type === "quizzes") setQuizzes(p => p.filter(i => i.id !== item.id));
-      if (type === "discussions") setDiscussions(p => p.filter(i => i.id !== item.id));
+      // 3. Update UI
+      const filterFn = (prev) => prev.filter(i => i.id !== item.id);
+      if (type === "materials") setMaterials(filterFn);
+      if (type === "assignments") setAssignments(filterFn);
+      if (type === "quizzes") setQuizzes(filterFn);
+      if (type === "discussions") setDiscussions(filterFn);
 
       alert("✅ Item berhasil dihapus");
     } catch (err) {
       console.error(err);
-      alert("Gagal menghapus item");
+      alert("Gagal menghapus item: " + err.message);
     }
   };
 
@@ -864,9 +855,11 @@ export default function ManageCoursesUI() {
                       replyContent={replyContent}
                       onLike={handleLikeDiscussion}
                       onReply={handleReplyDiscussion}
-                      onReplyChange={handleReplyChange}
+                      onReplyChange={handleEditReply}
                       onEdit={() => handleEditItem("discussions", discussion)}
                       onDelete={() => handleDeleteItem({ item: discussion, type: "discussions" })}
+                      onEditReply={handleEditReply}
+                      onDeleteReply={handleDeleteReply}
                     />
                   ))}
                 </div>
