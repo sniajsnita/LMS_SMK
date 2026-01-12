@@ -252,25 +252,43 @@ export default function ManageCoursesUI() {
   };
 
   const fetchMembers = async () => {
-    const { data, error } = await supabase
-      .from("course_members")
-      .select(`
-        role,
-        profiles (
-          id,
-          full_name
-        )
-      `)
-      .eq("course_id", selectedCourse.id);
+    try {
+      if (!selectedCourse) return;
 
-    if (!error) {
-      setMembers(
-        data.map((m) => ({
-          id: m.profiles.id,
-          name: m.profiles.full_name,
-          role: m.role,
-        }))
-      );
+      // Pastikan join ke tabel profiles untuk ambil nama
+      const { data, error } = await supabase
+        .from("course_members")
+        .select(`
+          id,
+          joined_at,
+          role,
+          profiles:user_id (
+            full_name
+          )
+        `)
+        .eq("courses_id", selectedCourse.id);
+
+      if (error) throw error;
+
+      const formattedMembers = data.map(m => {
+        const cleanDate = m.joined_at ? m.joined_at.split('.')[0].replace(' ', 'T') : null;
+
+        return {
+          id: m.id,
+          // Sesuaikan mapping ini dengan MemberItem kamu
+          name: m.profiles?.full_name || "Tanpa Nama",
+          role: m.role === 'teacher' ? 'Pengajar' : 'Siswa',
+          joinDate: new Date(m.joined_at).toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+          })
+        };
+      });
+
+      setMembers(formattedMembers);
+    } catch (err) {
+      console.error("Error fetching members:", err.message);
     }
   };
 
@@ -450,19 +468,37 @@ export default function ManageCoursesUI() {
     }
   };
 
-  const handleMemberAction = (memberId, action) => {
-    const member = members.find(m => m.id === memberId);
-    if (action === "remove") {
-      if (window.confirm(`Yakin ingin mengeluarkan ${member.name} dari kelas?`)) {
-        setMembers(members.filter(m => m.id !== memberId));
-        alert(`✅ ${member.name} berhasil dikeluarkan dari kelas!`);
+  const handleMemberAction = async (enrollmentId, action) => {
+    try {
+      let newRole = "";
+      if (action === "makeStudent") newRole = "student";
+      if (action === "makeTeacher") newRole = "teacher";
+
+      if (action === "remove") {
+        const confirm = window.confirm("Keluarkan anggota ini?");
+        if (!confirm) return;
+
+        const { error } = await supabase
+          .from("course_members")
+          .delete()
+          .eq("id", enrollmentId);
+
+        if (error) throw error;
+      } else {
+        // Logic untuk update role
+        const newRole = action === "makeStudent" ? "student" : "teacher";
+        const { error } = await supabase
+          .from("course_members")
+          .update({ role: newRole })
+          .eq("id", enrollmentId);
+
+        if (error) throw error;
       }
-    } else if (action === "makeStudent") {
-      setMembers(members.map(m => m.id === memberId ? { ...m, role: "Siswa" } : m));
-      alert(`✅ ${member.name} berhasil dijadikan siswa!`);
-    } else if (action === "makeTeacher") {
-      setMembers(members.map(m => m.id === memberId ? { ...m, role: "Pengajar" } : m));
-      alert(`✅ ${member.name} berhasil dijadikan pengajar!`);
+
+      // Refresh data setelah aksi berhasil
+      await fetchMembers();
+    } catch (err) {
+      alert("Gagal melakukan aksi: " + err.message);
     }
   };
 
@@ -883,8 +919,9 @@ export default function ManageCoursesUI() {
                     <MemberItem 
                       key={member.id}
                       member={member}
-                      onMakeStudent={() => handleMemberAction(member.id, "makeStudent")}
-                      onRemove={() => handleMemberAction(member.id, "remove")}
+                      onMakeStudent={(id) => handleMemberAction(id, "makeStudent")}
+                      onMakeTeacher={(id) => handleMemberAction(id, "makeTeacher")} // Tambahkan ini
+                      onRemove={(id) => handleMemberAction(id, "remove")}
                     />
                   ))}
                 </div>
