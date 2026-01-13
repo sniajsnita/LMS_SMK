@@ -563,70 +563,77 @@ const handleAddDiscussion = () => {
               <div>
                 <h5 className="fw-bold mb-4">📝 Daftar Tugas</h5>
                 <div className="d-flex flex-column gap-3">
-                  {loadingAssignments ? (
-                    <div className="text-center py-4">Memuat tugas...</div>
-                  ) : assignments.length === 0 ? (
-                    <div className="text-center py-4 text-muted">Belum ada tugas saat ini.</div>
-                  ) : (
-                    assignments.map((assignment) => (
-                      <div 
-                        key={assignment.id}
-                        className="card border shadow-sm"
-                        style={{
-                          borderRadius: "12px",
-                          transition: "all 0.3s ease",
-                          borderColor: assignment.status === "submitted" ? "#16a34a" : "#e5e7eb"
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = "translateX(8px)";
-                          e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateX(0)";
-                          e.currentTarget.style.boxShadow = "";
-                        }}
-                      >
-                        <div className="card-body p-4">
-                          <div className="d-flex justify-content-between align-items-start mb-3">
-                            <div>
-                              <h6 className="fw-bold mb-2">{assignment.title}</h6>
-                              <div className="d-flex align-items-center gap-3 small text-muted">
-                                <span className="d-flex align-items-center gap-1">
-                                  <Calendar size={14} />
-                                  Deadline: {new Date(assignment.deadline).toLocaleDateString('id-ID')}
-                                </span>
-                              </div>
-                            </div>
-                            {/* Tampilkan Nilai Jika Sudah Ada */}
-                            {assignment.status === "submitted" && assignment.score !== null && (
-                              <div className="text-end">
-                                <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
-                                  {assignment.score}
-                                </div>
-                                <small className="text-muted">Nilai</small>
-                              </div>
-                            )}
-                          </div>
-                          <div className="d-flex gap-2">
-                            {assignment.status === "submitted" ? (
-                              <span className="badge bg-success-subtle text-success px-3 py-2">
-                                <CheckCircle size={14} className="me-1" />
-                                Sudah Dikumpulkan
+                  {assignments.map((assignment) => (
+                    <div 
+                      key={assignment.id}
+                      className="card border shadow-sm"
+                      style={{
+                        borderRadius: "12px",
+                        transition: "all 0.3s ease",
+                        borderColor: assignment.status === "submitted" ? "#16a34a" : "#e5e7eb"
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = "translateX(8px)";
+                        e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateX(0)";
+                        e.currentTarget.style.boxShadow = "";
+                      }}
+                    >
+                      <div className="card-body p-4">
+                        <div className="d-flex justify-content-between align-items-start mb-3">
+                          <div>
+                            <h6 className="fw-bold mb-2">{assignment.title}</h6>
+                            <p className="text-muted mb-2">
+                              {assignment.description}
+                            </p>
+                            <div className="d-flex align-items-center gap-3 small text-muted">
+                              <span className="d-flex align-items-center gap-1">
+                                <Calendar size={14} />
+                                Deadline: {assignment.dueDate}
                               </span>
-                            ) : (
-                              <button 
-                                className="btn btn-primary btn-sm"
-                                style={{ borderRadius: "8px" }}
-                                onClick={() => handleOpenSubmitModal(assignment)}
+                            </div>
+                            {assignment.file && (
+                              <a
+                                href={assignment.file.url}
+                                download
+                                className="d-inline-flex align-items-center gap-2 text-decoration-none mt-2"
+                                style={{ color: "#2563eb", fontSize: "0.875rem" }}
                               >
-                                Kerjakan Tugas
-                              </button>
+                                <Download size={16} />
+                                {assignment.file.name}
+                              </a>
                             )}
                           </div>
+                          {assignment.status === "submitted" && assignment.score && (
+                            <div className="text-end">
+                              <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
+                                {assignment.score}
+                              </div>
+                              <small className="text-muted">Nilai</small>
+                            </div>
+                          )}
+                        </div>
+                        <div className="d-flex gap-2">
+                          {assignment.status === "submitted" ? (
+                            <span className="badge bg-success-subtle text-success px-3 py-2">
+                              <CheckCircle size={14} className="me-1" />
+                              Sudah Dikumpulkan
+                            </span>
+                          ) : (
+                            <button 
+                              className="btn btn-primary btn-sm"
+                              style={{ borderRadius: "8px" }}
+                              onClick={() => handleOpenSubmitModal(assignment)}
+                            >
+                              Kerjakan Tugas
+                            </button>
+                          )}
                         </div>
                       </div>
-                    ))
-                  )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
