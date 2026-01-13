@@ -1,6 +1,6 @@
-import { Trash2, Edit, Eye, Clock, FileText } from "lucide-react";
+import { Trash2, Edit, Eye, Clock, FileText, Award } from "lucide-react";
 
-const QuizItem = ({ quiz, onEdit, onDelete }) => {
+const QuizItem = ({ quiz, onEdit, onDelete, onManageGrades }) => {
   // Fungsi untuk membuka link kuis
   const handleViewQuiz = () => {
     if (!quiz.link) {
@@ -38,6 +38,17 @@ const QuizItem = ({ quiz, onEdit, onDelete }) => {
         </div>
 
         <div className="d-flex gap-2 ms-3">
+          {/* Tombol Kelola Nilai */}
+          <button
+            className="btn btn-success btn-sm d-flex align-items-center gap-1"
+            onClick={() => onManageGrades(quiz)}
+            style={{ borderRadius: "8px" }}
+            title="Kelola Nilai & Lihat Submission"
+          >
+            <Award size={16} />
+            <span className="d-none d-md-inline">Kelola Nilai</span>
+          </button>
+
           {/* TOMBOL LIHAT KUIS */}
           <button
             className="btn btn-outline-success btn-sm"

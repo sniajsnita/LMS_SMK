@@ -865,6 +865,7 @@ export default function ManageCoursesUI() {
                       quiz={quiz}
                       onEdit={() => handleEditItem("quizzes", quiz)}
                       onDelete={() => handleDeleteItem({ item: quiz, type: "quizzes" })}
+                      onManageGrades={handleManageGrades}
                     />
                   ))}
                 </div>
