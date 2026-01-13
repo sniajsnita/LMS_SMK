@@ -9,15 +9,21 @@ import {
   ArrowLeft,
   Users,
   Calendar,
+  Lock,
   Clock,
   CheckCircle,
   Download,
   Play,
   Plus,
   Upload,
+  UploadCloud,
+  CloudUpload,
+  Send,
   X,
   Trash2,
   ExternalLink,
+  Heart,
+  Edit3,
 } from "lucide-react";
 
 import ItemModal from "../components/course/ItemModal";
@@ -26,6 +32,7 @@ export default function CourseDetail() {
   const [activeTab, setActiveTab] = useState("materials");
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionText, setSubmissionText] = useState("");
   const [submissionFile, setSubmissionFile] = useState(null);
 
@@ -45,6 +52,8 @@ export default function CourseDetail() {
   const [replyContent, setReplyContent] = useState({});
   const [loadingDiscussions, setLoadingDiscussions] = useState(true);
   const [likes, setLikes] = useState({});
+  const [expandedDiscussions, setExpandedDiscussions] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Tambahkan di bagian state declarations
   const [showItemModal, setShowItemModal] = useState(false);
@@ -58,124 +67,157 @@ export default function CourseDetail() {
   const [searchParams] = useSearchParams();
   const id = searchParams.get("id");
 
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+    };
+    getUser();
+  }, []);
+
   // 2. Fungsi Fetch Master (Gabungan)
   const fetchAllCourseData = async (courseId) => {
     if (!courseId) return;
 
     try {
-      // Set semua loading jadi true di awal
       setLoading(true);
-      setLoadingMembers(true);
+      setLoadingDiscussions(true);
 
-      // 1. Ambil Detail Course & Count
-      const { data: courseData, error: courseErr } = await supabase
-        .from("courses")
-        .select(`*, course_members(count)`)
-        .eq("id", courseId)
-        .eq("course_members.role", "student")
-        .single();
-
-      if (courseErr) throw courseErr;
-
-      // 2. Ambil Nama Guru
-      let teacherName = "Guru Pengampu";
-      if (courseData.created_by) {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", courseData.created_by)
-          .single();
-        if (profileData) teacherName = profileData.full_name;
-      }
-
-      setCourse({
-        ...courseData,
-        teacher_name: teacherName,
-        student_count: courseData.course_members?.[0]?.count || 0 
-      });
-
-      // 3. Ambil SEMUA data secara paralel (termasuk members)
-      const [mats, assigns, qzs, discs, mems] = await Promise.all([
+      // 1. Ambil data dasar secara paralel
+      const [mats, assigns, qzs, discs, mems, likesData] = await Promise.all([
         supabase.from("materials").select("*").eq("course_id", courseId).order("id", { ascending: true }),
-        supabase.from("assignments").select("*").eq("course_id", courseId).order("deadline", { ascending: true }),
-        supabase.from("quizzes").select("*").eq("course_id", courseId).order("id", { ascending: true }),
+        supabase
+          .from("assignments")
+          .select(`
+            *,
+            submissions (
+              id,
+              user_id,
+              submitted_at,
+              grade
+            )
+          `)
+          .eq("course_id", courseId)
+          // Filter ini sangat penting agar siswa A tidak melihat data submission siswa B
+          .eq("submissions.user_id", currentUser?.id) 
+          .order("deadline", { ascending: true }),
+        supabase
+          .from("quizzes")
+          .select(`
+            *,
+            quiz_attempts (
+              score,
+              user_id
+            )
+          `)
+          .eq("course_id", courseId)
+          // Gunakan filter ini supaya hanya ambil skor milik user yang login
+          .eq("quiz_attempts.user_id", currentUser?.id),
         supabase.from("discussions").select("*").eq("course_id", courseId).order("created_at", { ascending: false }),
-        supabase.from("course_members").select("courses_id, user_id, role").eq("courses_id", courseId) // Fetch members di sini
+        supabase.from("course_members").select("id, user_id, role").eq("courses_id", courseId),
+        supabase.from("discussion_likes").select("discussion_id").eq("user_id", currentUser?.id)
       ]);
 
-      const { data: matsData, error: matsErr } = await supabase
-        .from("materials")
-        .select("*")
-        .eq("course_id", courseId)
-        .order("id", { ascending: true });
+      // 2. Ambil data Course & Guru
+      const { data: courseData } = await supabase
+        .from("courses")
+        .select(`*, profiles:created_by (full_name)`)
+        .eq("id", courseId)
+        .single();
 
-      // Mapping data agar sesuai dengan UI di gambar
-      const formattedMaterials = (matsData || []).map(m => ({
-        id: m.id,
-        title: m.title || "Judul Materi",
-        // Ambil deskripsi langsung dari kolom DB
-        description: m.description || "Deskripsi materi akan ditampilkan di sini untuk menjelaskan isi pembelajaran secara singkat.",
-        // Tipe: Ambil dari database, fallback ke 'link' jika kosong
-        type: m.type || 'link', 
-        // Status selesai: Nanti diisi dari tabel material_progress atau state lokal
-        completed: m.completed || false,
-        // Info Tambahan: Menampilkan durasi jika video, atau ukuran file jika dokumen
-        // Agar di UI muncul: "45 menit" atau "2.5 MB"
-        info: m.type === 'video' ? (m.duration || "45 menit") : 
-              m.type === 'file' ? (m.size || "2.5 MB") : 
-              "Tautan Eksternal",
-        // URL Utama: Kita seragamkan mengambil dari kolom file_url di DB
-        url: m.file_url || "#",
-        // Data tambahan untuk kebutuhan download/preview
-        file: m.file_url ? { url: m.file_url, name: m.title } : null
-      }));
+      if (courseData) {
+        setCourse({
+          ...courseData,
+          teacher_name: courseData.profiles?.full_name || "Guru Pengampu",
+          student_count: mems.data?.length || 0
+        });
+      }
 
-      setMaterials(formattedMaterials);
+      // 3. Ambil Profil User (Pembuat diskusi & member)
+      const allUserIds = [...new Set([
+        ...(discs.data?.map(d => d.user_id) || []),
+        ...(mems.data?.map(m => m.user_id) || [])
+      ])].filter(Boolean);
 
-      // setMaterials(mats.data || []);
+      let profilesData = [];
+      if (allUserIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", allUserIds);
+        profilesData = profs || [];
+      }
+
+      // 4. Ambil Balasan (Replies)
+      const discIds = discs.data?.map(d => d.id) || [];
+      let allReplies = [];
+      let allLikes = []; // Tambahkan variabel ini
+
+      if (discIds.length > 0) {
+        // Ambil Balasan
+        const { data: reps } = await supabase
+          .from("discussion_replies")
+          .select("*, profiles:user_id(full_name)")
+          .in("discussion_id", discIds)
+          .order("created_at", { ascending: true });
+        allReplies = reps || [];
+
+        // AMBIL SEMUA LIKES (Tambahkan ini)
+        const { data: likes } = await supabase
+          .from("discussion_likes")
+          .select("discussion_id, user_id")
+          .in("discussion_id", discIds);
+        allLikes = likes || [];
+      }
+
+      // 5. MAPPING DISKUSI (Gabungkan Diskusi + Nama + Replies + Like)
+      const formattedDiscussions = (discs.data || []).map(d => {
+        const discussionReplies = allReplies
+          .filter(r => r.discussion_id === d.id)
+          .map(r => ({
+            id: r.id,
+            title: d.title,
+            content: d.description,
+            author_name: r.profiles?.full_name || "User",
+            user_id: r.user_id,
+            created_at: r.created_at
+          }));
+
+        const likesForThisDisc = allLikes.filter(l => l.discussion_id === d.id);
+
+        return {
+          ...d,
+          author: profilesData.find(p => p.id === d.user_id)?.full_name || "Tanpa Nama",
+          replies: discussionReplies,
+          replies_count: discussionReplies.length,
+          is_liked: allLikes?.some(l => l.discussion_id === d.id && l.user_id === currentUser?.id) || false,
+  
+          likes_count: allLikes?.filter(l => l.discussion_id === d.id).length || 0
+        };
+      });
+
+      // 6. Update Semua State
+      setMaterials(mats.data || []);
       setAssignments(assigns.data || []);
       setQuizzes(qzs.data || []);
-      setDiscussions(discs.data || []);
-
-      // 4. Proses Profiles untuk Members
-      if (mems.data && mems.data.length > 0) {
-        const userIds = mems.data.map(m => m.user_id);
-        const { data: profiles, error: profErr } = await supabase
-          .from("profiles")
-          .select("id, full_name")
-          .in("id", userIds);
-
-        if (profErr) throw profErr;
-
-        const combined = mems.data.map(m => ({
-          id: m.id,
-          role: m.role === 'teacher' ? 'Guru' : 'Siswa', 
-          name: profiles?.find(p => p.id === m.user_id)?.full_name || "Anggota Kelas"
-        }));
-        
-        console.log("Data members berhasil digabung:", combined); // Cek console
-        setMembers(combined);
-      } else {
-        setMembers([]);
-      }
+      setDiscussions(formattedDiscussions);
+      setMembers((mems.data || []).map(m => ({
+        ...m,
+        name: profilesData.find(p => p.id === m.user_id)?.full_name || "Anggota",
+        role: m.role === 'teacher' ? 'Guru' : 'Siswa'
+      })));
 
     } catch (error) {
       console.error("Gagal memuat data kelas:", error.message);
     } finally {
       setLoading(false);
-      setLoadingAssignments(false);
-      setLoadingQuizzes(false);
       setLoadingDiscussions(false);
-      setLoadingMembers(false);
     }
   };
 
-  // 3. SATU useEffect untuk semua (Hapus semua useEffect lama kamu)
   useEffect(() => {
-    if (id) {
+    // Hanya jalankan fetch jika ID course DAN currentUser sudah tersedia
+    if (id && currentUser) {
       fetchAllCourseData(id);
     }
-  }, [id]);
+  }, [id, currentUser]);
 
   const handleOpenSubmitModal = (assignment) => {
     setSelectedAssignment(assignment);
@@ -203,30 +245,159 @@ export default function CourseDetail() {
     }
   };
 
-  const handleSubmitAssignment = () => {
-    if (!submissionText && !submissionFile) {
-      alert("❌ Mohon isi catatan atau upload file terlebih dahulu");
+  const handleSubmitAssignment = async () => {
+    if (!submissionFile) {
+      alert("❌ Mohon upload file tugas terlebih dahulu");
       return;
     }
+
+    try {
+      const user = currentUser;
+      if (!user) throw new Error("Silakan login terlebih dahulu");
+
+      // Persiapkan nama file
+      const fileExt = submissionFile.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      
+      // PERHATIKAN DI SINI: Sertakan nama folder 'submissions/' di depan nama file
+      const filePath = `submissions/${selectedAssignment.id}/${fileName}`;
+
+      // 1. Upload File ke bucket 'lms-files'
+      const { error: uploadError } = await supabase.storage
+        .from('lms-files') // Nama Bucket Utama kamu
+        .upload(filePath, submissionFile);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Ambil Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('lms-files')
+        .getPublicUrl(filePath);
+
+      // 3. Simpan ke Database
+      const { error: dbError } = await supabase
+        .from('submissions')
+        .insert([
+          {
+            assignment_id: selectedAssignment.id,
+            user_id: user.id,
+            file_url: publicUrl,
+            notes: submissionText,
+            submitted_at: new Date().toISOString()
+          }
+        ]);
+
+      if (dbError) throw dbError;
+
+      alert("✅ Tugas berhasil dikumpulkan!");
+      handleCloseSubmitModal();
+      fetchAllCourseData(id);
+
+    } catch (error) {
+      console.error("Submission error:", error.message);
+      alert("❌ Gagal mengirim tugas: " + error.message);
+    }
+  };
+
+  const handleLikeDiscussion = async (discussionId) => {
+    if (!currentUser) return alert("Silakan login terlebih dahulu");
+
+    const targetDisc = discussions.find((d) => d.id === discussionId);
+    const isCurrentlyLiked = targetDisc.is_liked;
+
+    // OPTIMISTIC UPDATE (Ubah angka di UI langsung)
+    setDiscussions((prev) =>
+      prev.map((d) =>
+        d.id === discussionId
+          ? {
+              ...d,
+              is_liked: !isCurrentlyLiked,
+              likes_count: isCurrentlyLiked
+                ? Math.max(0, (d.likes_count || 0) - 1)
+                : (d.likes_count || 0) + 1,
+            }
+          : d
+      )
+    );
+
+    try {
+      if (isCurrentlyLiked) {
+        // Hapus data suka
+        await supabase
+          .from("discussion_likes")
+          .delete()
+          .match({ discussion_id: discussionId, user_id: currentUser.id });
+      } else {
+        // Tambah data suka
+        const { error } = await supabase
+          .from("discussion_likes")
+          .insert({ discussion_id: discussionId, user_id: currentUser.id });
+        
+        if (error && error.code !== '23505') throw error;
+      }
+      // Tidak perlu update tabel discussions karena kolomnya tidak ada
+    } catch (err) {
+      console.error("Gagal update like:", err.message);
+      fetchAllCourseData(id); // Balikkan ke data asli jika gagal
+    }
+  };
+
+  const handleReplyDiscussion = async (discId) => {
+    const content = replyContent[discId];
+    if (!content?.trim() || !currentUser) return;
+
+    try {
+      const { error } = await supabase.from("discussion_replies").insert({
+        discussion_id: discId,
+        user_id: currentUser.id,
+        content: content.trim()
+      });
+
+      if (error) throw error;
+      
+      setReplyContent(prev => ({ ...prev, [discId]: "" }));
+      fetchAllCourseData(id); // Refresh otomatis
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteReply = async (replyId) => {
+    if (!window.confirm("Hapus balasan ini?")) return;
+    const { error } = await supabase.from("discussion_replies").delete().eq("id", replyId);
+    if (!error) fetchAllCourseData(id);
+  };
+
+  const handleEditReply = async (reply) => {
+    // 1. Munculkan prompt untuk mengisi konten baru
+    const newContent = window.prompt("Edit balasan Anda:", reply.content);
     
-    alert("✅ Tugas berhasil dikumpulkan!");
-    handleCloseSubmitModal();
+    // 2. Validasi: Jika batal atau isinya kosong/sama, jangan lanjut
+    if (!newContent || newContent.trim() === "" || newContent === reply.content) return;
+
+    try {
+      // 3. Update ke tabel discussion_replies di Supabase
+      const { error } = await supabase
+        .from("discussion_replies")
+        .update({ content: newContent.trim() })
+        .eq("id", reply.id);
+
+      if (error) throw error;
+
+      // 4. Refresh data agar tampilan terupdate
+      // Gunakan fungsi fetch data yang sudah kita buat tadi
+      fetchAllCourseData(id); 
+
+    } catch (err) {
+      console.error("Gagal mengedit balasan:", err.message);
+      alert("Gagal mengupdate balasan. Silakan coba lagi.");
+    }
   };
 
-  const handleLikeDiscussion = (id) => {
-    setLikes((prev) => ({
-      ...prev,
-      [id]: (prev[id] || 0) + 1,
-    }));
-  };
-
-  const handleReplyDiscussion = (id) => {
-    const reply = replyContent[id];
-    if (!reply || !reply.trim()) return;
-
-    alert(`Komentar dikirim: ${reply}`);
-    setReplyContent({ ...replyContent, [id]: "" });
-  };
+    const toggleReplies = (id) => {
+      setExpandedDiscussions(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+  
 
   const handleAddItem = (type) => {
     alert(`➕ Tambah ${type} (fitur belum dihubungkan ke backend)`);
@@ -275,73 +446,104 @@ export default function CourseDetail() {
     }
   };
 
-  // Handler untuk membuka modal
-const handleAddDiscussion = () => {
-  setItemModalType("discussions");
-  setEditingItem(null);
-  setShowItemModal(true);
-};
+  const handleStartQuiz = async (quiz) => {
+    // 1. Cek apakah sudah melewati deadline
+    const isPastDeadline = quiz.deadline && new Date() > new Date(quiz.deadline);
+    if (isPastDeadline) {
+      alert("Maaf, batas waktu pengerjaan kuis ini sudah berakhir.");
+      return;
+    }
 
-  // Handler untuk menyimpan diskusi
-  const handleSaveDiscussion = async (dataFromModal) => {
+    // 2. Cek apakah sudah pernah klik (sudah ada attempt)
+    if (quiz.quiz_attempts && quiz.quiz_attempts.length > 0) {
+      alert("Anda sudah menggunakan kesempatan mencoba kuis ini.");
+      return;
+    }
+
     try {
-      if (!dataFromModal?.title?.trim() || !dataFromModal?.description?.trim()) {
-        alert("❌ Judul dan deskripsi wajib diisi");
-        return false;
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        alert("❌ Silakan login terlebih dahulu");
-        return false;
-      }
-
-      // Upload file jika ada
-      let fileUrl = null;
-      if (dataFromModal.attachmentFile) {
-        const fileName = `${Date.now()}_${dataFromModal.attachmentFile.name}`;
-        const filePath = `discussions/${id}/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('lms-files')
-          .upload(filePath, dataFromModal.attachmentFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('lms-files')
-          .getPublicUrl(filePath);
-
-        fileUrl = publicUrl;
-      }
-
-      // Simpan ke database
-      const { data: savedData, error } = await supabase
-        .from('discussions')
-        .insert([{
-          course_id: id,
-          title: dataFromModal.title,
-          content: dataFromModal.description,
-          author: user.id,
-          file_url: fileUrl,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
+      // 3. Catat percobaan ke database (karena percobaan cuma 1x)
+      const { error } = await supabase
+        .from('quiz_attempts')
+        .insert([
+          { 
+            quiz_id: quiz.id, 
+            user_id: currentUser.id, 
+            score: 0 // Nilai default 0 saat mulai, bisa diupdate nanti jika ada sistem nilai otomatis
+          }
+        ]);
 
       if (error) throw error;
 
-      alert("✅ Diskusi berhasil dibuat!");
-      
-      // Refresh data
-      fetchAllCourseData(id);
-      
-      return true;
+      // 4. Buka link kuis di tab baru
+      window.open(quiz.link, "_blank");
+
+      // 5. Refresh data agar tombol langsung berubah jadi "Selesai"
+      await fetchAllCourseData(course);
 
     } catch (error) {
-      console.error("Error:", error);
-      alert("❌ Gagal menyimpan: " + error.message);
-      return false;
+      console.error("Gagal memulai kuis:", error.message);
+      alert("Terjadi kesalahan saat memulai kuis.");
+    }
+  };
+
+  // Handler untuk membuka modal
+  const handleAddDiscussion = () => {
+    setItemModalType("discussions");
+    setEditingItem(null);
+    setShowItemModal(true);
+  };
+
+  const handleEditDiscussion = (discussion) => {
+    console.log("Edit diskusi:", discussion);
+    
+    // 1. Set item yang ingin diedit ke state editingItem
+    setEditingItem(discussion);
+    
+    // 2. Set tipe modal ke "discussions"
+    setItemModalType("discussions");
+    
+    // 3. Tampilkan modal
+    setShowItemModal(true);
+  };
+
+  // Handler untuk menyimpan diskusi
+  const handleSaveDiscussion = async (formData) => {
+    if (!currentUser) return false;
+
+    try {
+      const discussionData = {
+        title: formData.title,
+        // Gunakan fallback jika modal mengirim 'content' atau 'description'
+        description: formData.description || formData.content || "",
+        course_id: id,
+        user_id: currentUser.id,
+      };
+
+      if (!discussionData.description) {
+        alert("Isi diskusi tidak boleh kosong");
+        return false;
+      }
+
+      if (editingItem) {
+        const { error } = await supabase
+          .from("discussions")
+          .update(discussionData)
+          .eq("id", editingItem.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("discussions")
+          .insert([discussionData]);
+        if (error) throw error;
+      }
+
+      await fetchAllCourseData(id); 
+      setEditingItem(null);
+      return true; // Berhasil!
+    } catch (err) {
+      console.error(err.message);
+      alert("Gagal: " + err.message);
+      return false; // Gagal!
     }
   };
 
@@ -591,19 +793,35 @@ const handleAddDiscussion = () => {
                             <div className="d-flex align-items-center gap-3 small text-muted">
                               <span className="d-flex align-items-center gap-1">
                                 <Calendar size={14} />
-                                Deadline: {assignment.dueDate}
+                                Deadline: {assignment.deadline ? (
+                                  new Date(assignment.deadline).toLocaleString('id-ID', { 
+                                    dateStyle: 'long', 
+                                    timeStyle: 'short' 
+                                  })
+                                ) : (
+                                  "Tidak ada batas waktu"
+                                )}
                               </span>
                             </div>
-                            {assignment.file && (
+                            {assignment.file_url ? (
                               <a
-                                href={assignment.file.url}
-                                download
-                                className="d-inline-flex align-items-center gap-2 text-decoration-none mt-2"
+                                href={assignment.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="d-inline-flex align-items-center gap-2 text-decoration-none mt-2 fw-medium"
                                 style={{ color: "#2563eb", fontSize: "0.875rem" }}
                               >
                                 <Download size={16} />
-                                {assignment.file.name}
+                                Unduh Instruksi Tugas
                               </a>
+                            ) : (
+                              <div 
+                                className="d-inline-flex align-items-center gap-2 mt-2 text-muted" 
+                                style={{ fontSize: "0.875rem", fontStyle: "italic" }}
+                              >
+                                <FileText size={16} />
+                                Tidak ada lampiran file dari pengajar
+                              </div>
                             )}
                           </div>
                           {assignment.status === "submitted" && assignment.score && (
@@ -616,15 +834,39 @@ const handleAddDiscussion = () => {
                           )}
                         </div>
                         <div className="d-flex gap-2">
-                          {assignment.status === "submitted" ? (
-                            <span className="badge bg-success-subtle text-success px-3 py-2">
-                              <CheckCircle size={14} className="me-1" />
-                              Sudah Dikumpulkan
-                            </span>
+                          {/* Logic: Jika array submissions ada isinya, berarti sudah dikumpulkan.
+                            Kita ambil data submission pertama ([0]) 
+                          */}
+                          {assignment.submissions && assignment.submissions.length > 0 ? (
+                            (() => {
+                              const sub = assignment.submissions[0];
+                              const isLate = new Date(sub.submitted_at) > new Date(assignment.deadline);
+                              
+                              return (
+                                <span className={`badge bg-${isLate ? 'danger' : 'success'}-subtle text-${isLate ? 'danger' : 'success'} px-3 py-2 rounded-pill d-flex align-items-center`}>
+                                  {isLate ? (
+                                    <>
+                                      <Clock size={14} className="me-1" />
+                                      Terlambat Dikumpulkan
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle size={14} className="me-1" />
+                                      Sudah Dikumpulkan
+                                    </>
+                                  )}
+                                </span>
+                              );
+                            })()
                           ) : (
+                            /* Jika belum ada data di array submissions */
                             <button 
-                              className="btn btn-primary btn-sm"
-                              style={{ borderRadius: "8px" }}
+                              className="btn btn-primary btn-sm px-4 fw-bold"
+                              style={{ 
+                                borderRadius: "10px", 
+                                background: "linear-gradient(135deg, #2563eb, #16a34a)", 
+                                border: "none" 
+                              }}
                               onClick={() => handleOpenSubmitModal(assignment)}
                             >
                               Kerjakan Tugas
@@ -643,199 +885,238 @@ const handleAddDiscussion = () => {
               <div>
                 <h5 className="fw-bold mb-4">🏆 Daftar Kuis</h5>
                 <div className="d-flex flex-column gap-3">
-                  {loadingQuizzes ? (
-                    <div className="text-center py-4 text-muted">Memuat daftar kuis...</div>
-                  ) : quizzes.length === 0 ? (
-                    <div className="text-center py-4 text-muted">Belum ada kuis yang tersedia.</div>
-                  ) : (
-                    quizzes.map((quiz) => (
+                  {quizzes.map((quiz) => {
+                    const attempt = quiz.quiz_attempts?.[0];
+                    const isCompleted = !!attempt;
+                    const isPastDeadline = quiz.deadline && new Date() > new Date(quiz.deadline);
+
+                    return (
                       <div 
                         key={quiz.id}
-                        className="card border shadow-sm"
+                        className="card border-0 shadow-sm mb-3"
                         style={{
-                          borderRadius: "12px",
+                          borderRadius: "16px",
                           transition: "all 0.3s ease",
-                          opacity: quiz.status === "locked" ? 0.6 : 1,
-                          cursor: quiz.status === "locked" ? "not-allowed" : "pointer"
-                        }}
-                        onMouseEnter={(e) => {
-                          if (quiz.status !== "locked") {
-                            e.currentTarget.style.transform = "translateX(8px)";
-                            e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = "translateX(0)";
-                          e.currentTarget.style.boxShadow = "";
+                          opacity: (isPastDeadline && !isCompleted) ? 0.7 : 1,
                         }}
                       >
                         <div className="card-body p-4">
-                          <div className="d-flex justify-content-between align-items-start">
+                          <div className="d-flex justify-content-between">
+                            {/* SISI KIRI: INFO KUIS */}
                             <div className="flex-grow-1">
-                              <h6 className="fw-bold mb-2">{quiz.title}</h6>
-                              <div className="d-flex align-items-center gap-3 small text-muted mb-3">
-                                <span>{quiz.questions_count || 0} soal</span>
+                              <h5 className="fw-bold mb-2" style={{ color: "#1e293b" }}>{quiz.title}</h5>
+                              <p className="text-muted mb-3">
+                                {quiz.description}
+                              </p>
+                              
+                              <div className="d-flex align-items-center gap-2 small text-muted mb-4">
                                 <span>•</span>
                                 <span className="d-flex align-items-center gap-1">
-                                  <Clock size={14} />
-                                  {quiz.duration} menit
+                                  <Calendar size={14} /> 
+                                  Deadline: {quiz.deadline ? new Date(quiz.deadline).toLocaleDateString('id-ID') : '-'}
                                 </span>
+                                <span>•</span>
+                                <span>Percobaan: {quiz.attempts || 1}x</span>
                               </div>
-                              
-                              {/* Logic Status Kuis */}
-                              {quiz.status === "completed" ? (
-                                <span className="badge bg-success-subtle text-success px-3 py-2">
-                                  <CheckCircle size={14} className="me-1" />
-                                  Selesai - Nilai: {quiz.score}
-                                </span>
-                              ) : quiz.status === "available" ? (
-                                <button 
-                                  className="btn btn-primary btn-sm"
-                                  style={{ borderRadius: "8px" }}
-                                  onClick={() => console.log("Mulai kuis:", quiz.id)}
-                                >
-                                  Mulai Kuis
-                                </button>
-                              ) : (
-                                <span className="badge bg-secondary px-3 py-2">
-                                  🔒 Terkunci
-                                </span>
-                              )}
+
+                              {/* TOMBOL / BADGE DI BAWAH */}
+                              <div>
+                                {isCompleted ? (
+                                  <span className="badge bg-success-subtle text-success px-3 py-2 rounded-2 d-inline-flex align-items-center gap-2 border border-success border-opacity-10">
+                                    <CheckCircle size={16} />
+                                    Selesai - Nilai: {attempt.score}
+                                  </span>
+                                ) : isPastDeadline ? (
+                                  <span className="badge bg-danger-subtle text-danger px-3 py-2 rounded-2 d-inline-flex align-items-center gap-2 border border-danger border-opacity-10">
+                                    <Lock size={16} />
+                                    Terkunci - Melewati Batas Waktu
+                                  </span>
+                                ) : (
+                                  <button 
+                                    className="btn btn-primary px-4 fw-bold"
+                                    style={{ borderRadius: "10px", backgroundColor: "#2563eb", border: "none" }}
+                                    onClick={() => handleStartQuiz(quiz)}
+                                  >
+                                    Mulai Kuis
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
-                            {/* Tampilan Nilai di Samping */}
-                            {quiz.status === "completed" && quiz.score !== null && (
-                              <div className="text-end ms-3">
-                                <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
-                                  {quiz.score}
+                            {/* SISI KANAN: NILAI BESAR (Hanya jika selesai) */}
+                            {isCompleted && (
+                              <div className="text-end d-flex flex-column justify-content-start pt-1">
+                                <div className="fw-bold" style={{ fontSize: "2.5rem", color: "#16a34a", lineHeight: "1" }}>
+                                  {attempt.score}
                                 </div>
-                                <small className="text-muted">Nilai</small>
+                                <div className="text-muted small fw-medium text-center">Nilai</div>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
-                    ))
-                  )}
+                    );
+                  })}
                 </div>
               </div>
             )}
+
 
             {/* DISCUSSIONS TAB*/}
             {activeTab === "discussions" && (
               <div>
                 <div className="d-flex justify-content-between align-items-center mb-4">
                   <h5 className="fw-bold mb-0">💬 Forum Diskusi</h5>
-                  <button
-                    className="btn btn-primary btn-sm"
-                    style={{ borderRadius: "8px" }}
-                    onClick={handleAddDiscussion} // ← Ubah ini
-                  >
-                    <Plus size={16} className="me-1" />
-                    Buat Diskusi
+                  <button className="btn btn-primary d-flex align-items-center gap-2" style={{ borderRadius: "10px", padding: "8px 20px" }} onClick={handleAddDiscussion}>
+                    <Plus size={18} /> Buat Diskusi
                   </button>
                 </div>
 
                 {loadingDiscussions ? (
-                  <div className="text-center py-5">Memuat diskusi...</div>
+                  <div className="text-center py-5 text-muted">Memuat diskusi...</div>
                 ) : discussions.length === 0 ? (
-                  <div className="text-center text-muted py-5">
-                    <MessageSquare size={48} className="mb-3" style={{ opacity: 0.5 }} />
-                    <p>Belum ada diskusi</p>
+                  <div className="text-center py-5 bg-light rounded-4 border border-dashed">
+                    <MessageSquare size={48} className="text-muted mb-3" style={{ opacity: 0.3 }} />
+                    <p className="text-muted mb-0">Belum ada diskusi di kelas ini.</p>
                   </div>
                 ) : (
                   <div className="d-flex flex-column gap-4">
-                    {discussions.map((discussion) => (
-                      <div
-                        key={discussion.id}
-                        className="card border-0 shadow-sm"
-                        style={{
-                          borderRadius: "16px",
-                          transition: "all 0.3s ease",
-                        }}
-                      >
-                        <div className="card-body p-4">
-                          <div className="d-flex align-items-start gap-3">
-                            <div
-                              className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
-                              style={{
-                                width: "48px",
-                                height: "48px",
-                                background: "linear-gradient(135deg, #2563eb, #16a34a)",
-                              }}
-                            >
-                              {discussion.author?.charAt(0).toUpperCase()}
-                            </div>
+                    {discussions.map((discussion) => {
+                      const isOwner = currentUser?.id === discussion.user_id;
+                      const isExpanded = expandedDiscussions[discussion.id];
+                      const displayedReplies = isExpanded 
+                        ? discussion.replies 
+                        : (discussion.replies?.slice(0, 1) || []);
 
-                            <div className="flex-grow-1">
-                              <div className="d-flex gap-2 mb-2 align-items-center">
-                                <span className="fw-semibold">{discussion.author}</span>
-                                <span className="text-muted small">
-                                  {new Date(discussion.created_at).toLocaleDateString('id-ID')}
-                                </span>
+                      return (
+                        <div key={discussion.id} className="card border-0 shadow-sm" style={{ borderRadius: "16px", border: "1px solid #f1f5f9" }}>
+                          <div className="card-body p-4">
+                            <div className="d-flex align-items-start gap-3">
+                              {/* Avatar */}
+                              <div className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
+                                style={{ width: "50px", height: "50px", flexShrink: 0, background: "linear-gradient(135deg, #2563eb, #16a34a)", fontSize: "1.2rem" }}>
+                                {(discussion.author || "A").charAt(0).toUpperCase()}
                               </div>
 
-                              <h6 className="fw-bold mb-2">{discussion.title}</h6>
-                              <p className="text-muted small mb-0">{discussion.content}</p>
-
-                              {/* ACTIONS */}
-                              <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                                <div className="d-flex gap-3 align-items-center text-muted small">
-                                  <button
-                                    className="btn btn-light btn-sm"
-                                    onClick={() => handleLikeDiscussion(discussion.id)}
-                                    style={{ borderRadius: "8px" }}
-                                  >
-                                    ❤️ {discussion.likes || 0}
-                                  </button>
-
-                                  <span className="d-flex align-items-center gap-2">
-                                    <MessageSquare size={16} />
-                                    {discussion.replies_count || 0} balasan
-                                  </span>
+                              <div className="flex-grow-1">
+                                <div className="d-flex justify-content-between align-items-start mb-1">
+                                  <div>
+                                    <span className="fw-bold text-dark">{discussion.author}</span>
+                                    {isOwner && <span className="badge bg-light text-primary ms-2 fw-normal">Anda</span>}
+                                  </div>
+                                  
+                                  {/* AREA TANGGAL DAN ACTION BUTTONS */}
+                                  <div className="d-flex align-items-center gap-3">
+                                    <span className="text-muted small d-flex align-items-center gap-1">
+                                      <Clock size={12} />
+                                      {new Date(discussion.created_at).toLocaleDateString('id-ID')}
+                                    </span>
+                                    
+                                    {isOwner && (
+                                      <div className="d-flex gap-2 border-start ps-2" style={{ borderColor: '#e2e8f0' }}>
+                                        <Edit3 
+                                          size={16} 
+                                          className="text-primary" 
+                                          style={{ cursor: "pointer", opacity: 0.8 }} 
+                                          onClick={() => handleEditDiscussion(discussion)} 
+                                        />
+                                        <Trash2 
+                                          size={16} 
+                                          className="text-danger" 
+                                          style={{ cursor: "pointer", opacity: 0.8 }} 
+                                          onClick={() => handleDeleteItem("discussions", discussion.id)} 
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
-                                <button
-                                  className="btn btn-outline-danger btn-sm"
-                                  onClick={() => handleDeleteItem("discussions", discussion.id)}
-                                  style={{ borderRadius: "8px" }}
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
+                                <h6 className="fw-bold text-primary mb-2">{discussion.title}</h6>
+                                <p className="text-secondary small mb-3">{discussion.content}</p>
 
-                              {/* COMMENT INPUT */}
-                              <div className="mt-3 d-flex gap-2">
-                                <input
-                                  type="text"
-                                  className="form-control border-0 shadow-sm"
-                                  placeholder="Tulis komentar..."
-                                  value={replyContent[discussion.id] || ""}
-                                  onChange={(e) =>
-                                    setReplyContent({
-                                      ...replyContent,
-                                      [discussion.id]: e.target.value,
-                                    })
-                                  }
-                                  style={{
-                                    borderRadius: "10px",
-                                    background: "#f8f9fa",
-                                  }}
-                                />
-                                <button
-                                  className="btn btn-primary btn-sm"
-                                  onClick={() => handleReplyDiscussion(discussion.id)}
-                                  disabled={!replyContent[discussion.id]}
-                                  style={{ borderRadius: "10px" }}
-                                >
-                                  Kirim
-                                </button>
+                                {/* Tombol Interaksi Utama (Like & Jumlah Balasan) */}
+                                <div className="d-flex justify-content-between align-items-center pt-3 border-top">
+                                  <div className="d-flex gap-3">
+                                    <button 
+                                      className="btn btn-sm d-flex align-items-center gap-2 border-0 bg-transparent p-0"
+                                      onClick={() => handleLikeDiscussion(discussion.id)}
+                                    >
+                                      <Heart 
+                                        size={20} 
+                                        className={discussion.is_liked ? "text-danger" : "text-secondary"} 
+                                        fill={discussion.is_liked ? "#ef4444" : "none"} 
+                                        style={{ transition: 'all 0.2s ease', cursor: 'pointer' }}
+                                      />
+                                      <span className={discussion.is_liked ? "text-danger fw-bold" : "text-secondary"}>
+                                        {discussion.likes_count || 0} Suka
+                                      </span>
+                                    </button>
+                                    
+                                    <div className="text-muted d-flex align-items-center gap-2 small">
+                                      <MessageSquare size={16} /> {discussion.replies_count || 0} Balasan
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* List Balasan */}
+                                {discussion.replies && discussion.replies.length > 0 && (
+                                  <div className="mt-3 ms-4 ps-3 border-start border-2" style={{ borderColor: '#f1f5f9' }}>
+                                    {displayedReplies.map((reply) => (
+                                      <div key={reply.id} className="bg-light p-3 rounded-4 mb-2 position-relative shadow-sm">
+                                        <div className="d-flex justify-content-between align-items-center mb-1">
+                                          <span className="fw-bold text-primary small">{reply.author_name}</span>
+                                          <div className="d-flex align-items-center gap-2">
+                                            <span className="text-muted" style={{ fontSize: '10px' }}>
+                                              {new Date(reply.created_at).toLocaleDateString('id-ID')}
+                                            </span>
+                                            {currentUser?.id === reply.user_id && (
+                                              <div className="d-flex gap-2 ms-1 border-start ps-2">
+                                                <Edit3 size={14} className="text-muted" style={{ cursor: "pointer" }} onClick={() => handleEditReply(reply)} />
+                                                <Trash2 size={14} className="text-danger" style={{ cursor: "pointer" }} onClick={() => handleDeleteReply(reply.id)} />
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <p className="small mb-1 text-dark">{reply.content}</p>
+                                      </div>
+                                    ))}
+
+                                    {discussion.replies.length > 1 && (
+                                      <button 
+                                        className="btn btn-link btn-sm text-decoration-none p-0 fw-bold mt-1"
+                                        onClick={() => toggleReplies(discussion.id)}
+                                      >
+                                        {isExpanded ? "Sembunyikan" : `Lihat ${discussion.replies.length - 1} balasan lainnya...`}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Input Balasan */}
+                                <div className="mt-3 d-flex gap-2">
+                                  <input
+                                    type="text"
+                                    className="form-control form-control-sm border-0 bg-light"
+                                    placeholder="Tulis balasan..."
+                                    style={{ borderRadius: "8px", padding: "10px" }}
+                                    value={replyContent[discussion.id] || ""}
+                                    onChange={(e) => setReplyContent({ ...replyContent, [discussion.id]: e.target.value })}
+                                  />
+                                  <button 
+                                    className="btn btn-primary btn-sm px-3 shadow-sm" 
+                                    disabled={!replyContent[discussion.id]} 
+                                    onClick={() => handleReplyDiscussion(discussion.id)}
+                                    style={{ borderRadius: "8px", background: "linear-gradient(135deg, #2563eb, #16a34a)", border: "none" }}
+                                  >
+                                    Kirim
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -909,171 +1190,180 @@ const handleAddDiscussion = () => {
       </div>
 
       {/* MODAL SUBMIT ASSIGNMENT */}
-      {showSubmitModal && selectedAssignment && (
-        <>
-          <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered modal-lg">
-              <div 
-                className="modal-content border-0 shadow-lg"
-                style={{ borderRadius: "16px" }}
-              >
-                <div className="modal-header border-0 pb-0">
-                  <div>
-                    <h5 className="modal-title fw-bold mb-1">
-                      📤 Kumpulkan Tugas
-                    </h5>
-                    <p className="text-muted small mb-0">{selectedAssignment.title}</p>
+     {showSubmitModal && selectedAssignment && (
+      <>
+        <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div 
+              className="modal-content border-0 shadow-lg"
+              style={{ borderRadius: "20px", overflow: "hidden" }}
+            >
+              {/* Header */}
+              <div className="modal-header border-0 p-4 pb-0">
+                <div className="d-flex align-items-center gap-3">
+                  <div 
+                    className="bg-primary bg-opacity-10 p-3 rounded-3"
+                    style={{ color: "#2563eb" }}
+                  >
+                    <UploadCloud size={28} />
                   </div>
-                  <button
-                    className="btn-close"
-                    onClick={handleCloseSubmitModal}
+                  <div>
+                    <h5 className="modal-title fw-bold mb-0" style={{ fontSize: '1.25rem' }}>
+                      Kumpulkan Tugas
+                    </h5>
+                    <p className="text-muted small mb-0">Pastikan file sudah sesuai sebelum dikirim</p>
+                  </div>
+                </div>
+                <button
+                  className="btn-close shadow-none"
+                  onClick={handleCloseSubmitModal}
+                />
+              </div>
+
+              <div className="modal-body p-4">
+                {/* Informasi Tugas & Deadline */}
+                <div className="mb-4">
+                  <label className="form-label fw-bold text-dark mb-2">Detail Tugas</label>
+                  <div 
+                    className="p-3 border shadow-sm"
+                    style={{ background: "#ffffff", borderRadius: "12px" }}
+                  >
+                    <h6 className="fw-bold mb-1">{selectedAssignment.title}</h6>
+                    <div className="d-flex align-items-center gap-3 mt-2">
+                      <span className="badge bg-danger-subtle text-danger px-3 py-2 rounded-pill small d-flex align-items-center gap-1">
+                        <Clock size={14} /> Deadline: {new Date(selectedAssignment.deadline).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Input Catatan */}
+                <div className="mb-4">
+                  <label className="form-label fw-bold text-dark mb-2">
+                    Catatan Siswa <span className="text-muted fw-normal small">(opsional)</span>
+                  </label>
+                  <textarea
+                    className="form-control border shadow-sm"
+                    rows="3"
+                    placeholder="Tambahkan pesan atau catatan untuk guru jika ada..."
+                    value={submissionText}
+                    onChange={(e) => setSubmissionText(e.target.value)}
+                    style={{
+                      borderRadius: "12px",
+                      background: "#fdfdfd",
+                      resize: "none",
+                      padding: "12px"
+                    }}
                   />
                 </div>
 
-                <div className="modal-body p-4">
-                  {/* Assignment Info */}
-                  <div 
-                    className="alert d-flex align-items-center gap-3 mb-4"
+                {/* Area Dropzone/Upload */}
+                <div className="mb-2">
+                  <label className="form-label fw-bold text-dark mb-2">Lampiran File</label>
+                  <div
+                    className="border-2 border-dashed rounded-4 p-5 text-center position-relative"
                     style={{
-                      background: "#eff6ff",
-                      border: "1px solid #bfdbfe",
-                      borderRadius: "12px"
+                      borderColor: submissionFile ? "#10b981" : "#e2e8f0",
+                      background: submissionFile ? "#f0fdf4" : "#f8fafc",
+                      transition: "all 0.2s ease"
                     }}
                   >
-                    <Calendar size={24} style={{ color: "#2563eb" }} />
-                    <div>
-                      <div className="fw-semibold text-dark">Deadline Pengumpulan</div>
-                      <div className="small text-muted">{selectedAssignment.deadline}</div>
-                    </div>
-                  </div>
-
-                  {/* Submission Text */}
-                  <div className="mb-4">
-                    <label className="form-label fw-semibold mb-2">
-                      Catatan / Keterangan <span className="text-muted fw-normal">(opsional)</span>
-                    </label>
-                    <textarea
-                      className="form-control border-0 shadow-sm"
-                      rows="4"
-                      placeholder="Tulis catatan atau keterangan tentang pengerjaan tugas Anda..."
-                      value={submissionText}
-                      onChange={(e) => setSubmissionText(e.target.value)}
-                      style={{
-                        borderRadius: "12px",
-                        background: "#f8f9fa",
-                        resize: "none"
-                      }}
-                    />
-                  </div>
-
-                  {/* File Upload */}
-                  <div className="mb-4">
-                    <label className="form-label fw-semibold mb-2">
-                      Upload File Tugas
-                    </label>
-                    <div
-                      className="border-2 border-dashed rounded-3 p-4 text-center"
-                      style={{
-                        borderColor: submissionFile ? "#16a34a" : "#cbd5e1",
-                        background: submissionFile ? "#f0fdf4" : "#f8f9fa",
-                        transition: "all 0.3s ease"
-                      }}
-                    >
-                      {submissionFile ? (
-                        <div>
-                          <FileText size={48} className="text-success mb-3" />
-                          <p className="mb-2 fw-semibold text-dark">{submissionFile.name}</p>
-                          <p className="small text-muted mb-3">
-                            {(submissionFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                          <button
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() => setSubmissionFile(null)}
-                            style={{ borderRadius: "8px" }}
-                          >
-                            <X size={16} className="me-1" />
-                            Hapus File
-                          </button>
+                    {submissionFile ? (
+                      <div className="animate__animated animate__fadeIn">
+                        <div className="d-inline-block bg-success bg-opacity-10 p-3 rounded-circle mb-3">
+                          <FileText size={40} className="text-success" />
                         </div>
-                      ) : (
-                        <div>
-                          <Upload size={48} className="text-muted mb-3" />
-                          <p className="mb-2 fw-semibold text-dark">
-                            Klik atau drag file ke sini
-                          </p>
-                          <p className="small text-muted mb-3">
-                            Mendukung: PDF, DOC, DOCX, ZIP, RAR (Max 10MB)
-                          </p>
-                          <label
-                            className="btn btn-primary btn-sm"
-                            style={{ borderRadius: "8px", cursor: "pointer" }}
-                          >
-                            <Upload size={16} className="me-1" />
-                            Pilih File
-                            <input
-                              type="file"
-                              className="d-none"
-                              accept=".pdf,.doc,.docx,.zip,.rar"
-                              onChange={handleFileChange}
-                            />
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Info */}
-                  <div 
-                    className="alert mb-0"
-                    style={{
-                      background: "#fffbeb",
-                      border: "1px solid #fde68a",
-                      borderRadius: "12px"
-                    }}
-                  >
-                    <div className="d-flex gap-2">
-                      <span style={{ color: "#f59e0b" }}>💡</span>
-                      <div className="small text-dark">
-                        <strong>Tips:</strong> Pastikan file yang Anda upload sesuai dengan instruksi tugas. 
-                        Anda dapat mengupload ulang sebelum deadline.
+                        <h6 className="fw-bold text-dark mb-1">{submissionFile.name}</h6>
+                        <p className="small text-muted">
+                          Ukuran: {(submissionFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                        <button
+                          className="btn btn-link text-danger text-decoration-none fw-semibold p-0 mt-2"
+                          onClick={() => setSubmissionFile(null)}
+                        >
+                          Ganti File
+                        </button>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="py-2">
+                        <div className="d-inline-block bg-primary bg-opacity-10 p-3 rounded-circle mb-3">
+                          <CloudUpload size={40} className="text-primary" />
+                        </div>
+                        <p className="mb-1 fw-bold text-dark">Pilih file tugas Anda</p>
+                        <p className="small text-muted mb-3">Format: PDF, DOCX, atau ZIP (Maks. 10MB)</p>
+                        <label
+                          className="btn btn-outline-primary px-4 fw-semibold shadow-sm"
+                          style={{ borderRadius: "10px", cursor: "pointer" }}
+                        >
+                          Pilih File
+                          <input
+                            type="file"
+                            className="d-none"
+                            accept=".pdf,.doc,.docx,.zip,.rar"
+                            onChange={handleFileChange}
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="modal-footer border-0 pt-0">
-                  <button
-                    className="btn btn-light shadow-sm"
-                    onClick={handleCloseSubmitModal}
-                    style={{
-                      borderRadius: "12px",
-                      padding: "10px 24px",
-                      border: "none"
-                    }}
-                  >
-                    Batal
-                  </button>
-                  <button 
-                    className="btn btn-primary shadow-sm"
-                    onClick={handleSubmitAssignment}
-                    disabled={!submissionText && !submissionFile}
-                    style={{
-                      background: !submissionText && !submissionFile 
-                        ? "#9ca3af" 
-                        : "linear-gradient(135deg, #2563eb, #16a34a)",
-                      border: "none",
-                      borderRadius: "12px",
-                      padding: "10px 24px",
-                      cursor: !submissionText && !submissionFile ? "not-allowed" : "pointer"
-                    }}
-                  >
-                    <CheckCircle size={16} className="me-2" />
-                    Kumpulkan Tugas
-                  </button>
+                {/* Tips Info (Sekarang berada di dalam Modal Body agar simetris) */}
+                <div 
+                  className="alert mt-4 mb-0 d-flex gap-3"
+                  style={{
+                    background: "#fffbeb",
+                    border: "1px solid #fde68a",
+                    borderRadius: "12px",
+                    padding: "16px"
+                  }}
+                >
+                  <span style={{ fontSize: "20px" }}>💡</span>
+                  <div className="small text-dark" style={{ lineHeight: "1.5" }}>
+                    <strong>Tips:</strong> Pastikan file yang Anda upload sesuai dengan instruksi tugas. 
+                    Anda dapat mengupload ulang sebelum deadline.
+                  </div>
                 </div>
+              </div>
+
+              {/* Footer */}
+              <div className="modal-footer border-0 p-4 pt-0">
+                <button
+                  className="btn btn-light px-4 py-2 fw-semibold me-2"
+                  onClick={handleCloseSubmitModal}
+                  disabled={isSubmitting}
+                  style={{ borderRadius: "10px", color: "#64748b" }}
+                >
+                  Batal
+                </button>
+                <button 
+                  className="btn btn-primary px-4 py-2 fw-bold d-flex align-items-center gap-2"
+                  onClick={handleSubmitAssignment}
+                  disabled={!submissionFile || isSubmitting}
+                  style={{
+                    background: "linear-gradient(135deg, #2563eb, #16a34a)",
+                    border: "none",
+                    borderRadius: "10px",
+                    boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)"
+                  }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      Mengirim...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} />
+                      Kumpulkan Sekarang
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
+        </div>
+        <div className="modal-backdrop fade show" style={{ zIndex: 1040 }}></div>
 
           {/* BACKDROP */}
           <div

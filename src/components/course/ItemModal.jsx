@@ -84,9 +84,11 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
   if (!show) return null;
 
   const handleSubmit = async () => {
+    // Pastikan formData sudah berisi { title: "...", description: "..." }
     const success = await onSave(formData);
+    
     if (success) {
-      onClose(); // Tutup modal dulu agar hilang dari layar
+      onClose(); // Hanya tutup jika onSave mengembalikan true
     }
   };
 
