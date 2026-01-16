@@ -1,150 +1,178 @@
-import React, { useState } from "react";
-import {
-  MessageSquare,
-  Plus,
-  ThumbsUp,
-  Send,
-  Search,
-  Edit,
-  Trash2,
-  Filter,
-} from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, Search, MessageSquare } from "lucide-react";
+import { supabase } from "../lib/supabase";
+import DiscussionItem from "../components/discussions/DiscussionItem"; // Pastikan path file benar
 
 export default function Discussions() {
+  // --- STATE DASAR ---
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("all");
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [replyContent, setReplyContent] = useState({});
+
+  // --- STATE FORM & EDIT ---
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [courseId, setCourseId] = useState("");
+  const [editingId, setEditingId] = useState(null);
 
-  const courses = [
-    { id: "1", title: "Pemrograman Web" },
-    { id: "2", title: "UI/UX Design" },
-    { id: "3", title: "Basis Data" },
-  ];
+  // --- STATE DATA ---
+  const [courses, setCourses] = useState([]);
+  const [discussions, setDiscussions] = useState([]);
 
-  const discussions = [
-    {
-      id: 1,
-      author: "Andi Saputra",
-      author_id: "user1",
-      course: "Pemrograman Web",
-      course_id: "1",
-      time: "2 jam yang lalu",
-      title: "Cara memahami React Router?",
-      content: "Saya masih bingung dengan konsep routing di React. Apakah ada yang bisa menjelaskan dengan bahasa yang mudah dipahami?",
-      likes: 5,
-      liked_by: [],
-      replies: [
-        { 
-          author: "Budi Santoso", 
-          content: "Gunakan BrowserRouter dan Route. Saya bisa bantu jelaskan lebih detail kalau mau.",
-          time: "1 jam yang lalu"
-        },
-      ],
-    },
-    {
-      id: 2,
-      author: "Siti Aminah",
-      author_id: "user2",
-      course: "UI/UX Design",
-      course_id: "2",
-      time: "1 hari yang lalu",
-      title: "Inspirasi desain dashboard",
-      content: "Ada rekomendasi website buat inspirasi UI dashboard yang modern dan clean?",
-      likes: 3,
-      liked_by: [],
-      replies: [
-        { 
-          author: "Ahmad Fauzi", 
-          content: "Coba lihat Dribbble dan Behance, banyak inspirasi bagus di sana!",
-          time: "20 jam yang lalu"
-        },
-        { 
-          author: "Dewi Lestari", 
-          content: "Pinterest juga bagus untuk koleksi inspirasi UI/UX",
-          time: "18 jam yang lalu"
-        },
-      ],
-    },
-    {
-      id: 3,
-      author: "Rizki Pratama",
-      author_id: "user3",
-      course: "Basis Data",
-      course_id: "3",
-      time: "3 hari yang lalu",
-      title: "Perbedaan SQL dan NoSQL?",
-      content: "Kapan sebaiknya menggunakan SQL dan kapan menggunakan NoSQL? Mohon pencerahannya.",
-      likes: 8,
-      liked_by: [],
-      replies: [],
-    },
-  ];
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+
+      const { data: coursesData } = await supabase.from("courses").select("id, title");
+      setCourses(coursesData || []);
+
+      await fetchDiscussions(user?.id);
+      setLoading(false);
+    };
+    init();
+  }, []);
+
+  const fetchDiscussions = async (currentUserId) => {
+    const { data, error } = await supabase
+      .from("discussions")
+      .select(`
+        *,
+        author:profiles!user_id(full_name),
+        course:courses!course_id(title),
+        replies:discussion_replies(
+          id,
+          content,
+          created_at,
+          user_id,
+          profiles:profiles!user_id(full_name)
+        ),
+        likes:discussion_likes(user_id)
+      `)
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      const formatted = data.map(d => ({
+        id: d.id,
+        user_id: d.user_id,
+        author: d.author?.full_name || "User",
+        course: d.course?.title || "Umum",
+        course_id: d.course_id,
+        date: new Date(d.created_at).toLocaleDateString('id-ID'), // Sesuai prop 'date' di DiscussionItem
+        title: d.title,
+        content: d.content,
+        likesCount: d.likes?.length || 0, // Sesuai prop di DiscussionItem
+        isLiked: d.likes?.some(l => l.user_id === currentUserId), // Sesuai prop di DiscussionItem
+        repliesCount: d.replies?.length || 0,
+        allReplies: d.replies || [] // Sesuai prop 'allReplies' di DiscussionItem
+      }));
+      setDiscussions(formatted);
+    }
+  };
+
+  // --- LOGIKA AKSI ---
+  const handleLike = async (discussionId) => {
+    if (!currentUser) return alert("Silakan login");
+    const target = discussions.find(d => d.id === discussionId);
+    
+    if (target.isLiked) {
+      await supabase.from("discussion_likes").delete().eq("discussion_id", discussionId).eq("user_id", currentUser.id);
+    } else {
+      await supabase.from("discussion_likes").insert({ discussion_id: discussionId, user_id: currentUser.id });
+    }
+    fetchDiscussions(currentUser.id);
+  };
+
+  const handleDelete = async (discussionId) => {
+    if (window.confirm("Apakah Anda yakin ingin menghapus diskusi ini?")) {
+      const { error } = await supabase.from("discussions").delete().eq("id", discussionId);
+      if (!error) fetchDiscussions(currentUser.id);
+    }
+  };
+
+  const handleEdit = (d) => {
+    setEditingId(d.id);
+    setTitle(d.title);
+    setContent(d.content);
+    setCourseId(d.course_id);
+    setShowNewDialog(true);
+  };
+
+  const handleCreateOrUpdate = async () => {
+    if (title && content && courseId && currentUser) {
+      const payload = { title, content, course_id: courseId, user_id: currentUser.id };
+      let error;
+      
+      if (editingId) {
+        const { error: err } = await supabase.from("discussions").update(payload).eq("id", editingId);
+        error = err;
+      } else {
+        const { error: err } = await supabase.from("discussions").insert(payload);
+        error = err;
+      }
+
+      if (!error) {
+        setShowNewDialog(false);
+        setEditingId(null);
+        setTitle(""); setContent(""); setCourseId("");
+        fetchDiscussions(currentUser.id);
+      }
+    }
+  };
+
+  const handleReply = async (discussionId) => {
+    const contentText = replyContent[discussionId];
+    if (contentText?.trim() && currentUser) {
+      const { error } = await supabase.from("discussion_replies").insert({
+        discussion_id: discussionId,
+        user_id: currentUser.id,
+        content: contentText.trim()
+      });
+      if (!error) {
+        setReplyContent({ ...replyContent, [discussionId]: "" });
+        fetchDiscussions(currentUser.id);
+      }
+    }
+  };
+
+  const handleDeleteReply = async (replyId) => {
+    if (window.confirm("Hapus balasan ini?")) {
+      const { error } = await supabase.from("discussion_replies").delete().eq("id", replyId);
+      if (!error) fetchDiscussions(currentUser?.id);
+    }
+  };
+
+  const handleEditReply = async (replyId, newContent) => {
+    const { error } = await supabase
+      .from("discussion_replies")
+      .update({ content: newContent })
+      .eq("id", replyId);
+    if (!error) fetchDiscussions(currentUser?.id);
+  };
 
   const filteredDiscussions = discussions.filter(d => {
-    const matchesCourse = selectedCourse === "all" || d.course_id === selectedCourse;
+    const matchesCourse = selectedCourse === "all" || String(d.course_id) === String(selectedCourse);
     const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         d.content.toLowerCase().includes(searchQuery.toLowerCase());
+                          d.content.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCourse && matchesSearch;
   });
-
-  const handleLike = (discussionId) => {
-    alert(`✅ Diskusi disukai!`);
-  };
-
-  const handleReply = (discussionId) => {
-    const reply = replyContent[discussionId];
-    if (reply && reply.trim()) {
-      alert(`✅ Balasan berhasil ditambahkan!`);
-      setReplyContent({ ...replyContent, [discussionId]: "" });
-    }
-  };
-
-  const handleCreateDiscussion = () => {
-    if (title && content && courseId) {
-      alert("✅ Diskusi berhasil dibuat!");
-      setShowNewDialog(false);
-      setTitle("");
-      setContent("");
-      setCourseId("");
-    }
-  };
 
   return (
     <div className="p-3 p-md-4 p-lg-5">
       {/* HEADER */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
         <div>
           <h1 className="fw-bold display-6 mb-2">💬 Forum Diskusi</h1>
-          <p className="text-muted mb-0">
-            Berkolaborasi dan berdiskusi dengan siswa lainnya
-          </p>
+          <p className="text-muted mb-0">Berkolaborasi dan berdiskusi dengan siswa lainnya</p>
         </div>
-        <button 
-          className="btn btn-primary d-flex align-items-center gap-2 shadow-sm"
-          onClick={() => setShowNewDialog(true)}
-          style={{
-            background: "linear-gradient(135deg, #9333ea, #ec4899)",
-            border: "none",
-            padding: "12px 24px",
-            borderRadius: "12px",
-            fontWeight: "600",
-            transition: "all 0.3s ease"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.boxShadow = "0 10px 25px rgba(147, 51, 234, 0.3)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "";
-          }}
-        >
-          <Plus size={20} />
-          Buat Diskusi
+        <button className="btn btn-primary d-flex align-items-center gap-2 shadow-sm" 
+          onClick={() => { setEditingId(null); setShowNewDialog(true); }} 
+          style={{ background: "linear-gradient(135deg, #2563eb, #16a34a)", border: "none", padding: "12px 24px", borderRadius: "12px", fontWeight: "600" }}>
+          <Plus size={20} /> Buat Diskusi
         </button>
       </div>
 
@@ -152,325 +180,84 @@ export default function Discussions() {
       <div className="row g-3 mb-4">
         <div className="col-md-8">
           <div className="position-relative">
-            <Search
-              size={20}
-              className="position-absolute text-muted"
-              style={{ top: "50%", left: "16px", transform: "translateY(-50%)" }}
-            />
-            <input
-              type="text"
-              className="form-control ps-5 border-0 shadow-sm"
-              placeholder="Cari diskusi berdasarkan judul atau isi..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                borderRadius: "12px",
-                padding: "12px 16px 12px 48px",
-                background: "#f8f9fa"
-              }}
-            />
+            <Search size={20} className="position-absolute text-muted" style={{ top: "50%", left: "16px", transform: "translateY(-50%)" }} />
+            <input type="text" className="form-control ps-5 border-0 shadow-sm" placeholder="Cari diskusi..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ borderRadius: "12px", padding: "12px 48px", background: "#f8f9fa" }} />
           </div>
         </div>
         <div className="col-md-4">
-          <select
-            className="form-select border-0 shadow-sm"
-            value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)}
-            style={{
-              borderRadius: "12px",
-              padding: "12px 16px",
-              background: "#f8f9fa"
-            }}
-          >
+          <select className="form-select border-0 shadow-sm" value={selectedCourse} onChange={(e) => setSelectedCourse(e.target.value)} style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}>
             <option value="all">Semua Kelas</option>
-            {courses.map(course => (
-              <option key={course.id} value={course.id}>{course.title}</option>
-            ))}
+            {courses.map(course => <option key={course.id} value={course.id}>{course.title}</option>)}
           </select>
         </div>
       </div>
 
-      {/* DISCUSSION LIST */}
-      {filteredDiscussions.length === 0 ? (
+      {/* LIST DISKUSI MENGGUNAKAN DISCUSSION ITEM */}
+      {loading ? (
+        <div className="text-center py-5">Memuat diskusi...</div>
+      ) : filteredDiscussions.length === 0 ? (
         <div className="card border-0 shadow-sm text-center p-5" style={{ borderRadius: "16px" }}>
           <MessageSquare size={64} className="text-muted mx-auto mb-3" style={{ opacity: 0.3 }} />
           <h5 className="fw-bold mb-2">Tidak Ada Diskusi</h5>
-          <p className="text-muted mb-0">
-            {searchQuery ? "Tidak ada diskusi yang sesuai dengan pencarian" : "Belum ada diskusi. Jadilah yang pertama!"}
-          </p>
         </div>
       ) : (
-        <div className="d-flex flex-column gap-4">
+        <div className="d-flex flex-column gap-2">
           {filteredDiscussions.map((d) => (
-            <div 
-              key={d.id} 
-              className="card border-0 shadow-sm"
-              style={{
-                borderRadius: "16px",
-                transition: "all 0.3s ease"
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-4px)";
-                e.currentTarget.style.boxShadow = "0 15px 40px rgba(0, 0, 0, 0.1)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "";
-              }}
-            >
-              <div className="card-body p-4">
-                {/* AUTHOR INFO */}
-                <div className="d-flex align-items-start gap-3 mb-3">
-                  <div 
-                    className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
-                    style={{
-                      width: "48px",
-                      height: "48px",
-                      background: "linear-gradient(135deg, #9333ea, #ec4899)",
-                      fontSize: "1.25rem"
-                    }}
-                  >
-                    {d.author.charAt(0)}
-                  </div>
-                  <div className="flex-grow-1">
-                    <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
-                      <span className="fw-semibold">{d.author}</span>
-                      <span className="text-muted small">{d.time}</span>
-                      <span 
-                        className="badge"
-                        style={{
-                          background: "#f3f4f6",
-                          color: "#6b7280",
-                          padding: "4px 12px",
-                          borderRadius: "6px",
-                          fontWeight: "500"
-                        }}
-                      >
-                        {d.course}
-                      </span>
-                    </div>
-                    
-                    {/* CONTENT */}
-                    <h5 className="fw-bold mb-2">{d.title}</h5>
-                    <p className="text-muted mb-3">{d.content}</p>
-
-                    {/* ACTIONS */}
-                    <div className="d-flex align-items-center gap-4 text-muted small mb-3 pb-3 border-bottom">
-                      <button
-                        className="btn btn-sm btn-light border-0 d-flex align-items-center gap-2"
-                        onClick={() => handleLike(d.id)}
-                        style={{
-                          borderRadius: "8px",
-                          padding: "6px 12px",
-                          transition: "all 0.2s ease"
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "#faf5ff";
-                          e.currentTarget.style.color = "#9333ea";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "#f8f9fa";
-                          e.currentTarget.style.color = "";
-                        }}
-                      >
-                        <ThumbsUp size={16} />
-                        <span>{d.likes}</span>
-                      </button>
-                      <span className="d-flex align-items-center gap-2">
-                        <MessageSquare size={16} />
-                        {d.replies.length} balasan
-                      </span>
-                    </div>
-
-                    {/* REPLIES */}
-                    {d.replies.length > 0 && (
-                      <div className="mb-3">
-                        {d.replies.map((r, i) => (
-                          <div 
-                            key={i} 
-                            className="d-flex align-items-start gap-3 ps-4 mb-3 border-start"
-                            style={{ borderLeftWidth: "3px", borderLeftColor: "#e9d5ff" }}
-                          >
-                            <div 
-                              className="rounded-circle d-flex align-items-center justify-content-center text-white flex-shrink-0"
-                              style={{
-                                width: "32px",
-                                height: "32px",
-                                background: "#d1d5db",
-                                fontSize: "0.875rem"
-                              }}
-                            >
-                              {r.author.charAt(0)}
-                            </div>
-                            <div className="flex-grow-1">
-                              <div className="d-flex align-items-center gap-2 mb-1">
-                                <span className="fw-semibold small">{r.author}</span>
-                                <span className="text-muted" style={{ fontSize: "0.75rem" }}>{r.time}</span>
-                              </div>
-                              <p className="mb-0 small text-muted">{r.content}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* REPLY INPUT */}
-                    <div className="d-flex gap-2">
-                      <input
-                        type="text"
-                        className="form-control border-0 shadow-sm"
-                        placeholder="Tulis balasan..."
-                        value={replyContent[d.id] || ""}
-                        onChange={(e) => setReplyContent({ ...replyContent, [d.id]: e.target.value })}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleReply(d.id);
-                          }
-                        }}
-                        style={{
-                          borderRadius: "10px",
-                          padding: "10px 16px",
-                          background: "#f8f9fa"
-                        }}
-                      />
-                      <button 
-                        className="btn btn-primary"
-                        onClick={() => handleReply(d.id)}
-                        disabled={!replyContent[d.id] || !replyContent[d.id].trim()}
-                        style={{
-                          background: "linear-gradient(135deg, #9333ea, #ec4899)",
-                          border: "none",
-                          borderRadius: "10px",
-                          padding: "10px 20px"
-                        }}
-                      >
-                        <Send size={18} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <DiscussionItem
+              key={d.id}
+              discussion={d}
+              currentUserId={currentUser?.id}
+              replyContent={replyContent}
+              onLike={handleLike}
+              onReply={handleReply}
+              onReplyChange={(id, value) => setReplyContent({ ...replyContent, [id]: value })}
+              // Tombol Edit/Delete hanya diproses jika milik user yang login
+              onEdit={currentUser?.id === d.user_id ? handleEdit : null}
+              onDelete={currentUser?.id === d.user_id ? handleDelete : null}
+              onEditReply={handleEditReply}
+              onDeleteReply={handleDeleteReply}
+            />
           ))}
         </div>
       )}
 
-      {/* MODAL CREATE DISCUSSION */}
+      {/* MODAL BUAT/EDIT DISKUSI */}
       {showNewDialog && (
         <>
           <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1050 }}>
             <div className="modal-dialog modal-dialog-centered modal-lg">
-              <div 
-                className="modal-content border-0 shadow-lg"
-                style={{ borderRadius: "16px" }}
-              >
+              <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "16px" }}>
                 <div className="modal-header border-0 pb-0">
-                  <h5 className="modal-title fw-bold">
-                    💬 Buat Diskusi Baru
-                  </h5>
-                  <button
-                    className="btn-close"
-                    onClick={() => setShowNewDialog(false)}
-                  />
+                  <h5 className="modal-title fw-bold">💬 {editingId ? "Edit Diskusi" : "Buat Diskusi Baru"}</h5>
+                  <button className="btn-close" onClick={() => { setShowNewDialog(false); setEditingId(null); }} />
                 </div>
-
                 <div className="modal-body p-4">
-                  {/* Select Course */}
                   <div className="mb-4">
                     <label className="form-label fw-semibold mb-2">Kelas</label>
-                    <select
-                      className="form-select border-0 shadow-sm"
-                      value={courseId}
-                      onChange={(e) => setCourseId(e.target.value)}
-                      style={{
-                        borderRadius: "12px",
-                        padding: "12px 16px",
-                        background: "#f8f9fa"
-                      }}
-                    >
+                    <select className="form-select border-0 shadow-sm" value={courseId} onChange={(e) => setCourseId(e.target.value)} style={{ borderRadius: "12px", background: "#f8f9fa" }}>
                       <option value="">Pilih kelas</option>
-                      {courses.map(course => (
-                        <option key={course.id} value={course.id}>{course.title}</option>
-                      ))}
+                      {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                     </select>
                   </div>
-
-                  {/* Title */}
                   <div className="mb-4">
                     <label className="form-label fw-semibold mb-2">Judul Diskusi</label>
-                    <input
-                      type="text"
-                      className="form-control border-0 shadow-sm"
-                      placeholder="Contoh: Cara menggunakan React Hooks"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      style={{
-                        borderRadius: "12px",
-                        padding: "12px 16px",
-                        background: "#f8f9fa"
-                      }}
-                    />
+                    <input type="text" className="form-control border-0 shadow-sm" value={title} onChange={(e) => setTitle(e.target.value)} style={{ borderRadius: "12px", background: "#f8f9fa" }} />
                   </div>
-
-                  {/* Content */}
                   <div className="mb-4">
                     <label className="form-label fw-semibold mb-2">Isi Diskusi</label>
-                    <textarea
-                      className="form-control border-0 shadow-sm"
-                      rows="6"
-                      placeholder="Apa yang ingin Anda diskusikan?"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      style={{
-                        borderRadius: "12px",
-                        padding: "12px 16px",
-                        background: "#f8f9fa",
-                        resize: "none"
-                      }}
-                    />
+                    <textarea className="form-control border-0 shadow-sm" rows="6" value={content} onChange={(e) => setContent(e.target.value)} style={{ borderRadius: "12px", background: "#f8f9fa", resize: "none" }} />
                   </div>
                 </div>
-
                 <div className="modal-footer border-0 pt-0">
-                  <button
-                    className="btn btn-light shadow-sm"
-                    onClick={() => setShowNewDialog(false)}
-                    style={{
-                      borderRadius: "12px",
-                      padding: "10px 24px",
-                      border: "none"
-                    }}
-                  >
-                    Batal
-                  </button>
-                  <button 
-                    className="btn btn-primary shadow-sm"
-                    onClick={handleCreateDiscussion}
-                    disabled={!title || !content || !courseId}
-                    style={{
-                      background: !title || !content || !courseId
-                        ? "#9ca3af" 
-                        : "linear-gradient(135deg, #9333ea, #ec4899)",
-                      border: "none",
-                      borderRadius: "12px",
-                      padding: "10px 24px",
-                      cursor: !title || !content || !courseId ? "not-allowed" : "pointer"
-                    }}
-                  >
-                    <MessageSquare size={16} className="me-2" />
-                    Posting Diskusi
+                  <button className="btn btn-light shadow-sm" onClick={() => { setShowNewDialog(false); setEditingId(null); }}>Batal</button>
+                  <button className="btn btn-primary shadow-sm" onClick={handleCreateOrUpdate} disabled={!title || !content || !courseId} style={{ background: "linear-gradient(135deg, #2563eb, #16a34a)", border: "none", borderRadius: "12px" }}>
+                    {editingId ? "Simpan Perubahan" : "Posting Diskusi"}
                   </button>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* BACKDROP */}
-          <div
-            className="modal-backdrop fade show"
-            onClick={() => setShowNewDialog(false)}
-            style={{ zIndex: 1040 }}
-          />
+          <div className="modal-backdrop fade show" onClick={() => { setShowNewDialog(false); setEditingId(null); }} style={{ zIndex: 1040 }} />
         </>
       )}
     </div>

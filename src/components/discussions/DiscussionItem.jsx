@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Trash2, MessageSquare, Edit, Send, ChevronDown, ChevronUp, Heart, Clock } from "lucide-react";
 
 const DiscussionItem = ({ 
-  discussion, 
+  discussion,
+  currentUserId,
   replyContent, 
   onLike, 
   onReply, 
@@ -133,23 +134,25 @@ const DiscussionItem = ({
                         <span className="text-muted" style={{ fontSize: "10px" }}>
                           {new Date(reply.created_at).toLocaleDateString('id-ID')}
                         </span>
-                        <div className="d-flex gap-1 border-start ps-2" style={{ borderColor: '#dee2e6' }}>
-                          <Edit 
-                            size={14} 
-                            className="text-muted" 
-                            style={{ cursor: "pointer" }} 
-                            onClick={() => {
-                              const newContent = window.prompt("Edit komentar:", reply.content);
-                              if (newContent && newContent.trim()) onEditReply(reply.id, newContent);
-                            }} 
-                          />
-                          <Trash2 
-                            size={14} 
-                            className="text-danger" 
-                            style={{ cursor: "pointer" }} 
-                            onClick={() => onDeleteReply(reply.id)} 
-                          />
-                        </div>
+                        {currentUserId === reply.user_id && (
+                          <div className="d-flex gap-1 border-start ps-2" style={{ borderColor: '#dee2e6' }}>
+                            <Edit 
+                              size={14} 
+                              className="text-muted" 
+                              style={{ cursor: "pointer" }} 
+                              onClick={() => {
+                                const newContent = window.prompt("Edit komentar:", reply.content);
+                                if (newContent && newContent.trim()) onEditReply(reply.id, newContent);
+                              }} 
+                            />
+                            <Trash2 
+                              size={14} 
+                              className="text-danger" 
+                              style={{ cursor: "pointer" }} 
+                              onClick={() => onDeleteReply(reply.id)} 
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                     <p className="mb-0 text-dark" style={{ fontSize: "0.9rem" }}>{reply.content}</p>
