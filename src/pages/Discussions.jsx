@@ -207,6 +207,23 @@ export default function Discussions() {
               key={d.id}
               discussion={d}
               currentUserId={currentUser?.id}
+              badge={
+                <span 
+                  className="badge border-0" 
+                  style={{ 
+                    backgroundColor: "#f1f5f9", // Abu-abu sangat muda (Slate 100)
+                    color: "#43474b",           // Teks Slate 600 agar tidak terlalu kontras
+                    fontSize: "0.7rem", 
+                    fontWeight: "500",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    display: "inline-flex",
+                    alignItems: "center"
+                  }}
+                >
+                  {d.course}
+                </span>
+              }
               replyContent={replyContent}
               onLike={handleLike}
               onReply={handleReply}

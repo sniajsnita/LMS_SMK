@@ -4,6 +4,7 @@ import { Trash2, MessageSquare, Edit, Send, ChevronDown, ChevronUp, Heart, Clock
 const DiscussionItem = ({ 
   discussion,
   currentUserId,
+  badge,
   replyContent, 
   onLike, 
   onReply, 
@@ -54,9 +55,10 @@ const DiscussionItem = ({
           <div className="flex-grow-1">
             {/* Header Diskusi: Nama & Tanggal + Tombol Aksi */}
             <div className="d-flex justify-content-between align-items-start mb-2">
-              <div>
+              <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
                 <span className="fw-bold text-dark">{discussion.author}</span>
-                {/* Jika Anda punya logic isOwner, bisa ditambah badge di sini */}
+                <span className="text-muted" style={{ fontSize: "0.75rem" }}>{discussion.date}</span>
+                {badge} {/* Badge dikirim dari parent */}
               </div>
               
               {/* AREA TANGGAL DAN TOMBOL EDIT/HAPUS (PINDAH KE SINI) */}
