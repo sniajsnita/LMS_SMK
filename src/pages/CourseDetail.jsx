@@ -86,32 +86,23 @@ export default function CourseDetail() {
       // 1. Ambil data dasar secara paralel
       const [mats, assigns, qzs, discs, mems, likesData] = await Promise.all([
         supabase.from("materials").select("*").eq("course_id", courseId).order("id", { ascending: true }),
-        supabase
-          .from("assignments")
-          .select(`
+        supabase.from("assignments").select(`
             *,
             submissions (
-              id,
-              user_id,
-              submitted_at,
-              grade
+              id, user_id, submitted_at, grade
             )
-          `)
-          .eq("course_id", courseId)
-          // Filter ini sangat penting agar siswa A tidak melihat data submission siswa B
-          .eq("submissions.user_id", currentUser?.id) 
+          `).eq("course_id", courseId)
+          .eq("submissions.user_id", currentUser?.id)
           .order("deadline", { ascending: true }),
         supabase
           .from("quizzes")
           .select(`
             *,
             quiz_attempts (
-              score,
-              user_id
+              score
             )
           `)
           .eq("course_id", courseId)
-          // Gunakan filter ini supaya hanya ambil skor milik user yang login
           .eq("quiz_attempts.user_id", currentUser?.id),
         supabase.from("discussions").select("*").eq("course_id", courseId).order("created_at", { ascending: false }),
         supabase.from("course_members").select("id, user_id, role").eq("courses_id", courseId),
@@ -129,11 +120,11 @@ export default function CourseDetail() {
         setCourse({
           ...courseData,
           teacher_name: courseData.profiles?.full_name || "Guru Pengampu",
-          student_count: mems.data?.length || 0
+          student_count: mems.data?.filter(m => m.role === 'student').length || 0 // PERBAIKAN: Hitung hanya siswa
         });
       }
 
-      // 3. Ambil Profil User (Pembuat diskusi & member)
+      // 3. Ambil Profil User
       const allUserIds = [...new Set([
         ...(discs.data?.map(d => d.user_id) || []),
         ...(mems.data?.map(m => m.user_id) || [])
@@ -145,61 +136,75 @@ export default function CourseDetail() {
         profilesData = profs || [];
       }
 
-      // 4. Ambil Balasan (Replies)
+      // 4. Ambil Balasan & Likes
       const discIds = discs.data?.map(d => d.id) || [];
       let allReplies = [];
-      let allLikes = []; // Tambahkan variabel ini
+      let allLikes = [];
 
       if (discIds.length > 0) {
-        // Ambil Balasan
-        const { data: reps } = await supabase
-          .from("discussion_replies")
-          .select("*, profiles:user_id(full_name)")
-          .in("discussion_id", discIds)
-          .order("created_at", { ascending: true });
-        allReplies = reps || [];
-
-        // AMBIL SEMUA LIKES (Tambahkan ini)
-        const { data: likes } = await supabase
-          .from("discussion_likes")
-          .select("discussion_id, user_id")
-          .in("discussion_id", discIds);
-        allLikes = likes || [];
+        const [reps, likes] = await Promise.all([
+          supabase.from("discussion_replies").select("*, profiles:user_id(full_name)").in("discussion_id", discIds).order("created_at", { ascending: true }),
+          supabase.from("discussion_likes").select("discussion_id, user_id").in("discussion_id", discIds)
+        ]);
+        allReplies = reps.data || [];
+        allLikes = likes.data || [];
       }
 
-      // 5. MAPPING DISKUSI (Gabungkan Diskusi + Nama + Replies + Like)
+      // 5. MAPPING DATA (DINAMIS)
+
+      // A. Tugas
+      const formattedAssigns = (assigns.data || []).map(assign => {
+        const userSubmission = assign.submissions?.[0];
+        return {
+          ...assign,
+          // PERBAIKAN: Logika status yang lebih akurat
+          status: userSubmission 
+            ? (userSubmission.grade !== null ? "graded" : "submitted") 
+            : "pending",
+          score: userSubmission?.grade || null,
+          submittedAt: userSubmission?.submitted_at || null
+        };
+      });
+
+      // B. Kuis (PERBAIKAN: Mapping kuis belum ada di kodemu sebelumnya)
+      const formattedQuizzes = (qzs.data || []).map(quiz => {
+        const userAttempt = quiz.quiz_attempts?.[0];
+        return {
+          ...quiz,
+          status: userAttempt ? "completed" : (quiz.is_locked ? "locked" : "available"),
+          score: userAttempt?.score || null
+        };
+      });
+
+      // C. Diskusi
       const formattedDiscussions = (discs.data || []).map(d => {
         const discussionReplies = allReplies
           .filter(r => r.discussion_id === d.id)
           .map(r => ({
             id: r.id,
-            title: d.title,
-            content: d.description,
             author_name: r.profiles?.full_name || "User",
+            content: r.content, // PERBAIKAN: Pastikan ini kolom konten reply, bukan deskripsi diskusi
             user_id: r.user_id,
             created_at: r.created_at
           }));
-
-        const likesForThisDisc = allLikes.filter(l => l.discussion_id === d.id);
 
         return {
           ...d,
           author: profilesData.find(p => p.id === d.user_id)?.full_name || "Tanpa Nama",
           replies: discussionReplies,
           replies_count: discussionReplies.length,
-          is_liked: allLikes?.some(l => l.discussion_id === d.id && l.user_id === currentUser?.id) || false,
-  
-          likes_count: allLikes?.filter(l => l.discussion_id === d.id).length || 0
+          is_liked: allLikes.some(l => l.discussion_id === d.id && l.user_id === currentUser?.id),
+          likes_count: allLikes.filter(l => l.discussion_id === d.id).length
         };
       });
 
       // 6. Update Semua State
       setMaterials(mats.data || []);
-      setAssignments(assigns.data || []);
-      setQuizzes(qzs.data || []);
+      setAssignments(formattedAssigns);
+      setQuizzes(formattedQuizzes); // PERBAIKAN: Gunakan formattedQuizzes
       setDiscussions(formattedDiscussions);
       setMembers((mems.data || []).map(m => ({
-        ...m,
+        id: m.id,
         name: profilesData.find(p => p.id === m.user_id)?.full_name || "Anggota",
         role: m.role === 'teacher' ? 'Guru' : 'Siswa'
       })));
@@ -448,7 +453,7 @@ export default function CourseDetail() {
 
   const handleStartQuiz = async (quiz) => {
     // 1. Cek apakah sudah melewati deadline
-    const isPastDeadline = quiz.deadline && new Date() > new Date(quiz.deadline);
+    const isPastDeadline = quiz.end_date && new Date() > new Date(quiz.end_date);
     if (isPastDeadline) {
       alert("Maaf, batas waktu pengerjaan kuis ini sudah berakhir.");
       return;
@@ -824,19 +829,16 @@ export default function CourseDetail() {
                               </div>
                             )}
                           </div>
-                          {assignment.status === "submitted" && assignment.score && (
-                            <div className="text-end">
-                              <div className="fw-bold" style={{ fontSize: "1.5rem", color: "#16a34a" }}>
+                          {assignment.score !== null && (
+                            <div className="text-end animate__animated animate__fadeIn">
+                              <div className="fw-bold" style={{ fontSize: "2.4rem", color: "#16a34a" }}>
                                 {assignment.score}
                               </div>
-                              <small className="text-muted">Nilai</small>
+                              <small className="text-muted d-block" style={{ marginTop: "-5px" }}>Nilai</small>
                             </div>
                           )}
                         </div>
                         <div className="d-flex gap-2">
-                          {/* Logic: Jika array submissions ada isinya, berarti sudah dikumpulkan.
-                            Kita ambil data submission pertama ([0]) 
-                          */}
                           {assignment.submissions && assignment.submissions.length > 0 ? (
                             (() => {
                               const sub = assignment.submissions[0];
@@ -888,7 +890,7 @@ export default function CourseDetail() {
                   {quizzes.map((quiz) => {
                     const attempt = quiz.quiz_attempts?.[0];
                     const isCompleted = !!attempt;
-                    const isPastDeadline = quiz.deadline && new Date() > new Date(quiz.deadline);
+                    const isPastDeadline = quiz.end_date && new Date() > new Date(quiz.end_date);
 
                     return (
                       <div 
@@ -913,7 +915,7 @@ export default function CourseDetail() {
                                 <span>•</span>
                                 <span className="d-flex align-items-center gap-1">
                                   <Calendar size={14} /> 
-                                  Deadline: {quiz.deadline ? new Date(quiz.deadline).toLocaleDateString('id-ID') : '-'}
+                                  Deadline: {quiz.end_date ? new Date(quiz.end_date).toLocaleDateString('id-ID') : '-'}
                                 </span>
                                 <span>•</span>
                                 <span>Percobaan: {quiz.attempts || 1}x</span>
@@ -1190,7 +1192,7 @@ export default function CourseDetail() {
       </div>
 
       {/* MODAL SUBMIT ASSIGNMENT */}
-     {showSubmitModal && selectedAssignment && (
+      {showSubmitModal && selectedAssignment && (
       <>
         <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-dialog-centered modal-lg">

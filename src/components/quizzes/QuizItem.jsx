@@ -1,6 +1,11 @@
+import React, { useState } from 'react';
 import { Trash2, Edit, Eye, Clock, FileText, Award } from "lucide-react";
+import GradingView from '../grading/GradingView';
 
 const QuizItem = ({ quiz, onEdit, onDelete, onManageGrades }) => {
+
+  const [selectedQuiz, setSelectedQuiz] = useState(null);
+
   // Fungsi untuk membuka link kuis
   const handleViewQuiz = () => {
     if (!quiz.link) {
@@ -48,6 +53,14 @@ const QuizItem = ({ quiz, onEdit, onDelete, onManageGrades }) => {
             <Award size={16} />
             <span className="d-none d-md-inline">Kelola Nilai</span>
           </button>
+
+          {selectedQuiz && (
+            <GradingView 
+              assignment={selectedQuiz} 
+              type="quiz" // PAKSA DISINI
+              onBack={() => setSelectedQuiz(null)} 
+            />
+          )}
 
           {/* TOMBOL LIHAT KUIS */}
           <button
