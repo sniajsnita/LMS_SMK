@@ -84,8 +84,9 @@ export default function CourseDetail() {
       setLoadingDiscussions(true);
 
       // 1. Ambil data dasar secara paralel
-      const [mats, assigns, qzs, discs, mems, likesData] = await Promise.all([
+      const [mats, progress, assigns, qzs, discs, mems, likesData] = await Promise.all([
         supabase.from("materials").select("*").eq("course_id", courseId).order("id", { ascending: true }),
+        supabase.from("material_progress").select("material_id").eq("user_id", currentUser?.id),
         supabase.from("assignments").select(`
             *,
             submissions (
@@ -108,6 +109,15 @@ export default function CourseDetail() {
         supabase.from("course_members").select("id, user_id, role").eq("courses_id", courseId),
         supabase.from("discussion_likes").select("discussion_id").eq("user_id", currentUser?.id)
       ]);
+
+      // Buat daftar ID materi yang sudah selesai agar mudah dicari
+      const completedMaterialIds = (progress.data || []).map(c => c.material_id);
+
+      // MAPPING DATA MATERI (Tambahkan ini sebelum Langkah 6)
+      const formattedMaterials = (mats.data || []).map(m => ({
+        ...m,
+        completed: completedMaterialIds.includes(m.id) // Cek apakah ID materi ada di daftar yang sudah selesai
+      }));
 
       // 2. Ambil data Course & Guru
       const { data: courseData } = await supabase
@@ -201,19 +211,31 @@ export default function CourseDetail() {
       // 6. Update Semua State
       setMaterials(mats.data || []);
       setAssignments(formattedAssigns);
-      setQuizzes(formattedQuizzes); // PERBAIKAN: Gunakan formattedQuizzes
+      setQuizzes(formattedQuizzes); 
       setDiscussions(formattedDiscussions);
-      setMembers((mems.data || []).map(m => ({
-        id: m.id,
-        name: profilesData.find(p => p.id === m.user_id)?.full_name || "Anggota",
-        role: m.role === 'teacher' ? 'Guru' : 'Siswa'
-      })));
+      setMaterials(formattedMaterials);
+
+      // PERBAIKAN DI SINI:
+      const formattedMembers = (mems.data || []).map(m => {
+        // Cari profil berdasarkan user_id
+        const userProfile = profilesData.find(p => p.id === m.user_id);
+        
+        return {
+          id: m.id,
+          user_id: m.user_id, // Simpan user_id untuk keperluan debugging
+          name: userProfile ? userProfile.full_name : "Memuat nama...", 
+          role: m.role === 'teacher' ? 'Guru' : 'Siswa'
+        };
+      });
+
+      setMembers(formattedMembers);
 
     } catch (error) {
       console.error("Gagal memuat data kelas:", error.message);
     } finally {
       setLoading(false);
       setLoadingDiscussions(false);
+      setLoadingMembers(false);
     }
   };
 
@@ -416,37 +438,20 @@ export default function CourseDetail() {
 
   // MATERIAL
   const handleOpenMaterial = async (material) => {
-    // 1. Ambil User ID yang sedang login
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      alert("Silakan login terlebih dahulu");
-      return;
-    }
+    // 1. Buka materi (window.open atau link)
+    window.open(material.file_url || material.link_url, "_blank");
 
-    // 2. Buka Link
-    window.open(material.url, "_blank");
-
-    // 3. Simpan ke tabel material_progress menggunakan UPSERT
-    // (Upsert akan mengupdate jika sudah ada, atau menambah jika belum ada)
+    // 2. Tandai selesai di DB jika belum
     if (!material.completed) {
-      try {
-        const { error } = await supabase
-          .from('material_progress')
-          .upsert({ 
-            user_id: user.id, 
-            material_id: material.id,
-            is_completed: true 
-          }, { onConflict: 'user_id,material_id' }); // Sesuai constraint UNIQUE tadi
+      const { error } = await supabase
+        .from("material_progress")
+        .insert({ user_id: currentUser.id, material_id: material.id });
 
-        if (error) throw error;
-
-        // Update UI lokal agar badge langsung jadi hijau
+      if (!error) {
+        // 3. Update UI secara instan tanpa reload full
         setMaterials(prev => prev.map(m => 
           m.id === material.id ? { ...m, completed: true } : m
         ));
-      } catch (err) {
-        console.error("Gagal menyimpan progress:", err.message);
       }
     }
   };
@@ -682,88 +687,88 @@ export default function CourseDetail() {
 
             {/* MATERIALS TAB */}
             {activeTab === "materials" && (
-            <div>
-              <h5 className="fw-bold mb-4">📘 Materi Pembelajaran</h5>
-              
-              {loading ? (
-                <div className="text-center py-5">
-                  <div className="spinner-border text-primary" role="status"></div>
-                  <p className="mt-2 text-muted">Memuat materi...</p>
-                </div>
-              ) : materials.length === 0 ? (
-                <div className="text-center py-5 text-muted">Belum ada materi tersedia.</div>
-              ) : (
-                <div className="d-flex flex-column gap-3">
-                  {materials.map((material) => (
-                    <div key={material.id} className="card border shadow-sm border-0" style={{ borderRadius: "12px" }}>
-                      <div className="card-body p-3 d-flex align-items-center justify-content-between">
-                        <div className="d-flex align-items-center gap-3">
-                          {/* ICON DINAMIS: Warna berubah jika selesai */}
-                          <div 
-                            className="d-flex align-items-center justify-content-center rounded-circle"
-                            style={{
-                              width: "48px",
-                              height: "48px",
-                              background: material.completed ? "#dcfce7" : "#f0f7ff",
-                              transition: "all 0.3s ease"
-                            }}
-                          >
-                            {material.type === "video" && <Play size={22} className={material.completed ? "text-success" : "text-primary"} />}
-                            {material.type === "file" && <FileText size={22} className={material.completed ? "text-success" : "text-primary"} />}
-                            {material.type === "link" && <ExternalLink size={22} className={material.completed ? "text-success" : "text-primary"} />}
-                          </div>
+              <div>
+                <h5 className="fw-bold mb-4">📘 Materi Pembelajaran</h5>
+                
+                {loading ? (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-primary" role="status"></div>
+                    <p className="mt-2 text-muted">Memuat materi...</p>
+                  </div>
+                ) : materials.length === 0 ? (
+                  <div className="text-center py-5 text-muted">Belum ada materi tersedia.</div>
+                ) : (
+                  <div className="d-flex flex-column gap-3">
+                    {materials.map((material) => (
+                      <div key={material.id} className="card border shadow-sm border-0" style={{ borderRadius: "12px" }}>
+                        <div className="card-body p-3 d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-center gap-3">
+                            {/* ICON DINAMIS: Warna berubah jika selesai */}
+                            <div 
+                              className="d-flex align-items-center justify-content-center rounded-circle"
+                              style={{
+                                width: "48px",
+                                height: "48px",
+                                background: material.completed ? "#dcfce7" : "#f0f7ff",
+                                transition: "all 0.3s ease"
+                              }}
+                            >
+                              {material.type === "video" && <Play size={22} className={material.completed ? "text-success" : "text-primary"} />}
+                              {material.type === "file" && <FileText size={22} className={material.completed ? "text-success" : "text-primary"} />}
+                              {material.type === "link" && <ExternalLink size={22} className={material.completed ? "text-success" : "text-primary"} />}
+                            </div>
 
-                          <div>
-                            <h6 className="mb-1 fw-semibold">{material.title}</h6>
-                            <p className="text-muted mb-2" style={{ fontSize: "0.85rem", maxWidth: "520px", lineHeight: "1.4" }}>
-                              {material.description}
-                            </p>
+                            <div>
+                              <h6 className="mb-1 fw-semibold">{material.title}</h6>
+                              <p className="text-muted mb-2" style={{ fontSize: "0.85rem", maxWidth: "520px", lineHeight: "1.4" }}>
+                                {material.description}
+                              </p>
 
-                            <div className="d-flex align-items-center gap-3 small">
-                              {/* INFO DURASI/SIZE */}
-                              <span className="d-flex align-items-center gap-1 text-muted">
-                                {material.type === "video" ? (
-                                  <><Clock size={14} /> {material.duration || "45 menit"}</>
-                                ) : material.type === "file" ? (
-                                  <><Download size={14} /> {material.size || "2.5 MB"}</>
+                              <div className="d-flex align-items-center gap-3 small">
+                                {/* INFO DURASI/SIZE */}
+                                <span className="d-flex align-items-center gap-1 text-muted">
+                                  {material.type === "video" ? (
+                                    <><Clock size={14} /> {material.duration || "45 menit"}</>
+                                  ) : material.type === "file" ? (
+                                    <><Download size={14} /> {material.size || "2.5 MB"}</>
+                                  ) : (
+                                    <><ExternalLink size={14} /> Tautan Luar</>
+                                  )}
+                                </span>
+                                
+                                {/* BADGE STATUS */}
+                                {material.completed ? (
+                                  <span className="badge bg-success-subtle text-success border border-success-subtle">
+                                    <CheckCircle size={12} className="me-1" />
+                                    Selesai
+                                  </span>
                                 ) : (
-                                  <><ExternalLink size={14} /> Tautan Luar</>
+                                  <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                    {material.type === "video" && "Belum ditonton"}
+                                    {material.type === "file" && "Belum diunduh"}
+                                    {material.type === "link" && "Belum dilihat"}
+                                  </span>
                                 )}
-                              </span>
-                              
-                              {/* BADGE STATUS */}
-                              {material.completed ? (
-                                <span className="badge bg-success-subtle text-success border border-success-subtle">
-                                  <CheckCircle size={12} className="me-1" />
-                                  Selesai
-                                </span>
-                              ) : (
-                                <span className="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
-                                  {material.type === "video" && "Belum ditonton"}
-                                  {material.type === "file" && "Belum diunduh"}
-                                  {material.type === "link" && "Belum dilihat"}
-                                </span>
-                              )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* TOMBOL AKSI */}
-                        <button
-                          className={`btn btn-sm ${material.completed ? 'btn-outline-success' : 'btn-primary'}`}
-                          style={{ borderRadius: "8px", minWidth: "90px", fontWeight: "500" }}
-                          onClick={() => handleOpenMaterial(material)}
-                        >
-                          {material.type === "file" ? "Unduh" : 
-                          material.type === "video" ? "Tonton" : "Lihat"}
-                        </button>
+                          {/* TOMBOL AKSI */}
+                          <button
+                            className={`btn btn-sm ${material.completed ? 'btn-outline-success' : 'btn-primary'}`}
+                            style={{ borderRadius: "8px", minWidth: "90px", fontWeight: "500" }}
+                            onClick={() => handleOpenMaterial(material)}
+                          >
+                            {material.type === "file" ? "Unduh" : 
+                            material.type === "video" ? "Tonton" : "Lihat"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ASSIGNMENTS TAB */}
             {activeTab === "assignments" && (

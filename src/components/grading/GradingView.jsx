@@ -125,11 +125,11 @@ const GradingView = ({ assignment, onBack, type }) => {
       // Pastikan nilai dikonversi ke Float (Number)
       const finalScore = parseFloat(score);
 
-      console.log("--- DEBUG UPDATE ---");
-      console.log("Target Table:", targetTable);
-      console.log("Update Column:", scoreField);
-      console.log("Target ID:", selectedSubmission.id);
-      console.log("Value to Send:", finalScore);
+      // console.log("--- DEBUG UPDATE ---");
+      // console.log("Target Table:", targetTable);
+      // console.log("Update Column:", scoreField);
+      // console.log("Target ID:", selectedSubmission.id);
+      // console.log("Value to Send:", finalScore);
 
       const { data, error, status } = await supabase
         .from(targetTable)
