@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { Link, useSearchParams } from "react-router-dom";
+import AssignmentModal from "../components/course/AssignmentModal";
 import {
   BookOpen,
   FileText,
@@ -1196,190 +1197,19 @@ export default function CourseDetail() {
         </div>
       </div>
 
-      {/* MODAL SUBMIT ASSIGNMENT */}
-      {showSubmitModal && selectedAssignment && (
-      <>
-        <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered modal-lg">
-            <div 
-              className="modal-content border-0 shadow-lg"
-              style={{ borderRadius: "20px", overflow: "hidden" }}
-            >
-              {/* Header */}
-              <div className="modal-header border-0 p-4 pb-0">
-                <div className="d-flex align-items-center gap-3">
-                  <div 
-                    className="bg-primary bg-opacity-10 p-3 rounded-3"
-                    style={{ color: "#2563eb" }}
-                  >
-                    <UploadCloud size={28} />
-                  </div>
-                  <div>
-                    <h5 className="modal-title fw-bold mb-0" style={{ fontSize: '1.25rem' }}>
-                      Kumpulkan Tugas
-                    </h5>
-                    <p className="text-muted small mb-0">Pastikan file sudah sesuai sebelum dikirim</p>
-                  </div>
-                </div>
-                <button
-                  className="btn-close shadow-none"
-                  onClick={handleCloseSubmitModal}
-                />
-              </div>
+      {/* Panggil Komponen Modal */}
+      <AssignmentModal 
+        show={showSubmitModal}
+        assignment={selectedAssignment}
+        onClose={handleCloseSubmitModal}
+        submissionFile={submissionFile}
+        setSubmissionFile={setSubmissionFile}
+        submissionText={submissionText}
+        setSubmissionText={setSubmissionText}
+        isSubmitting={isSubmitting}
+        onSubmit={handleSubmitAssignment}
+      />
 
-              <div className="modal-body p-4">
-                {/* Informasi Tugas & Deadline */}
-                <div className="mb-4">
-                  <label className="form-label fw-bold text-dark mb-2">Detail Tugas</label>
-                  <div 
-                    className="p-3 border shadow-sm"
-                    style={{ background: "#ffffff", borderRadius: "12px" }}
-                  >
-                    <h6 className="fw-bold mb-1">{selectedAssignment.title}</h6>
-                    <div className="d-flex align-items-center gap-3 mt-2">
-                      <span className="badge bg-danger-subtle text-danger px-3 py-2 rounded-pill small d-flex align-items-center gap-1">
-                        <Clock size={14} /> Deadline: {new Date(selectedAssignment.deadline).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Input Catatan */}
-                <div className="mb-4">
-                  <label className="form-label fw-bold text-dark mb-2">
-                    Catatan Siswa <span className="text-muted fw-normal small">(opsional)</span>
-                  </label>
-                  <textarea
-                    className="form-control border shadow-sm"
-                    rows="3"
-                    placeholder="Tambahkan pesan atau catatan untuk guru jika ada..."
-                    value={submissionText}
-                    onChange={(e) => setSubmissionText(e.target.value)}
-                    style={{
-                      borderRadius: "12px",
-                      background: "#fdfdfd",
-                      resize: "none",
-                      padding: "12px"
-                    }}
-                  />
-                </div>
-
-                {/* Area Dropzone/Upload */}
-                <div className="mb-2">
-                  <label className="form-label fw-bold text-dark mb-2">Lampiran File</label>
-                  <div
-                    className="border-2 border-dashed rounded-4 p-5 text-center position-relative"
-                    style={{
-                      borderColor: submissionFile ? "#10b981" : "#e2e8f0",
-                      background: submissionFile ? "#f0fdf4" : "#f8fafc",
-                      transition: "all 0.2s ease"
-                    }}
-                  >
-                    {submissionFile ? (
-                      <div className="animate__animated animate__fadeIn">
-                        <div className="d-inline-block bg-success bg-opacity-10 p-3 rounded-circle mb-3">
-                          <FileText size={40} className="text-success" />
-                        </div>
-                        <h6 className="fw-bold text-dark mb-1">{submissionFile.name}</h6>
-                        <p className="small text-muted">
-                          Ukuran: {(submissionFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                        <button
-                          className="btn btn-link text-danger text-decoration-none fw-semibold p-0 mt-2"
-                          onClick={() => setSubmissionFile(null)}
-                        >
-                          Ganti File
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="py-2">
-                        <div className="d-inline-block bg-primary bg-opacity-10 p-3 rounded-circle mb-3">
-                          <CloudUpload size={40} className="text-primary" />
-                        </div>
-                        <p className="mb-1 fw-bold text-dark">Pilih file tugas Anda</p>
-                        <p className="small text-muted mb-3">Format: PDF, DOCX, atau ZIP (Maks. 10MB)</p>
-                        <label
-                          className="btn btn-outline-primary px-4 fw-semibold shadow-sm"
-                          style={{ borderRadius: "10px", cursor: "pointer" }}
-                        >
-                          Pilih File
-                          <input
-                            type="file"
-                            className="d-none"
-                            accept=".pdf,.doc,.docx,.zip,.rar"
-                            onChange={handleFileChange}
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Tips Info (Sekarang berada di dalam Modal Body agar simetris) */}
-                <div 
-                  className="alert mt-4 mb-0 d-flex gap-3"
-                  style={{
-                    background: "#fffbeb",
-                    border: "1px solid #fde68a",
-                    borderRadius: "12px",
-                    padding: "16px"
-                  }}
-                >
-                  <span style={{ fontSize: "20px" }}>💡</span>
-                  <div className="small text-dark" style={{ lineHeight: "1.5" }}>
-                    <strong>Tips:</strong> Pastikan file yang Anda upload sesuai dengan instruksi tugas. 
-                    Anda dapat mengupload ulang sebelum deadline.
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="modal-footer border-0 p-4 pt-0">
-                <button
-                  className="btn btn-light px-4 py-2 fw-semibold me-2"
-                  onClick={handleCloseSubmitModal}
-                  disabled={isSubmitting}
-                  style={{ borderRadius: "10px", color: "#64748b" }}
-                >
-                  Batal
-                </button>
-                <button 
-                  className="btn btn-primary px-4 py-2 fw-bold d-flex align-items-center gap-2"
-                  onClick={handleSubmitAssignment}
-                  disabled={!submissionFile || isSubmitting}
-                  style={{
-                    background: "linear-gradient(135deg, #2563eb, #16a34a)",
-                    border: "none",
-                    borderRadius: "10px",
-                    boxShadow: "0 4px 12px rgba(37, 99, 235, 0.2)"
-                  }}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                      Mengirim...
-                    </>
-                  ) : (
-                    <>
-                      <Send size={18} />
-                      Kumpulkan Sekarang
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="modal-backdrop fade show" style={{ zIndex: 1040 }}></div>
-
-          {/* BACKDROP */}
-          <div
-            className="modal-backdrop fade show"
-            onClick={handleCloseSubmitModal}
-            style={{ zIndex: 1040 }}
-          />
-        </>
-      )}
       {/* ITEM MODAL */}
       <ItemModal
         show={showItemModal}

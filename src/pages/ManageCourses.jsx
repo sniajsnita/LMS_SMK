@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { useNavigate } from "react-router-dom";
 import { Plus, Users, BookOpen, FileText, Award, MessageSquare } from "lucide-react";
 
 // Import Components
@@ -667,6 +668,8 @@ export default function ManageCoursesUI() {
       alert("Gagal menghapus item: " + err.message);
     }
   };
+
+  const navigate = useNavigate();
 
   // Grading Handler
   const handleManageGrades = (assignment) => {
