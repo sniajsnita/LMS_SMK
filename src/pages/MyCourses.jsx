@@ -9,48 +9,16 @@ export default function MyCourses() {
   const [joinCode, setJoinCode] = useState("");
   const [viewMode, setViewMode] = useState("grid");
   
-  // STATE DINAMIS
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Ambil data saat halaman dimuat
-  useEffect(() => {
-    fetchMyCourses();
-  }, []);
-
-  // const fetchMyCourses = async () => {
-  //   try {
-  //     const { data: { user } } = await supabase.auth.getUser();
-  //     console.log("User ID saat ini:", user?.id); // CEK 1
-
-  //     const { data, error } = await supabase
-  //       .from('course_members')
-  //       .select(`
-  //         role,
-  //         courses (*) 
-  //       `)
-  //       .eq('user_id', user.id);
-
-  //     if (error) {
-  //       console.error("Error dari Supabase:", error.message); // CEK 2
-  //       return;
-  //     }
-
-  //     console.log("Data mentah dari Supabase:", data); // CEK 3
-      
-  //     // ... rest of code
-  //   } catch (err) {
-  //     console.error("Internal Error:", err);
-  //   }
-  // };
-
+  // --- 1. FUNGSI FETCH (TARUH DI LUAR, JANGAN DI DALAM FUNGSI LAIN) ---
   const fetchMyCourses = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Ambil data membership dan detail kelas  
       const { data, error } = await supabase
         .from('course_members')
         .select(`
@@ -62,46 +30,58 @@ export default function MyCourses() {
         `)
         .eq('user_id', user.id)
         .eq('role', 'student')
-        .eq('courses.course_members.role', 'student'); // Filter count untuk siswa saja
+        .eq('courses.course_members.role', 'student');
 
       if (error) throw error;
 
-      // 2. Ambil semua ID pengajar (created_by) dari kelas yang ditemukan
-      // Kita kumpulkan ID unik agar tidak fetch berulang kali
-      const teacherIds = [...new Set(data
-        .filter(item => item.courses !== null)
-        .map(item => item.courses.created_by)
-      )].filter(id => id !== null);
+      const [allMats, allAssigns, allQuizzes, completedMats, submissions, quizAttempts, profiles] = await Promise.all([
+        supabase.from('materials').select('id, course_id'),
+        supabase.from('assignments').select('id, course_id'),
+        supabase.from('quizzes').select('id, course_id'),
+        supabase.from('completed_materials').select('material_id').eq('user_id', user.id),
+        supabase.from('submissions').select('assignment_id').eq('user_id', user.id),
+        supabase.from('quiz_attempts').select('quiz_id').eq('user_id', user.id).eq('status', 'completed'),
+        supabase.from('profiles').select('id, full_name')
+      ]);
 
-      // 3. Fetch data nama pengajar dari tabel profiles secara manual
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles') // Ganti dengan 'profiles' atau tabel tempat Anda menyimpan nama user
-        .select('id, full_name')
-        .in('id', teacherIds);
-
-      if (profileError) console.error("Profile Fetch Error:", profileError.message);
-
-      // 4. Gabungkan data
       const formatted = data
         .filter(item => item.courses !== null)
         .map(item => {
-          // Cari profil pengajar yang cocok dengan created_by di tabel courses
-          const instructor = profiles?.find(p => p.id === item.courses.created_by);
+          const course = item.courses;
+          const instructor = profiles.data?.find(p => p.id === course.created_by);
+
+          const courseMaterials = allMats.data?.filter(m => m.course_id === course.id) || [];
+          const courseAssigns = allAssigns.data?.filter(a => a.course_id === course.id) || [];
+          const courseQuizzes = allQuizzes.data?.filter(q => q.course_id === course.id) || [];
+
+          const totalItems = courseMaterials.length + courseAssigns.length + courseQuizzes.length;
+
+          const doneMaterials = courseMaterials.filter(m => 
+            completedMats.data?.some(cm => cm.material_id === m.id)
+          ).length;
+
+          const doneAssignments = courseAssigns.filter(a => 
+            submissions.data?.some(s => s.assignment_id === a.id)
+          ).length;
+
+          const doneQuizzes = courseQuizzes.filter(q => 
+            quizAttempts.data?.some(qa => qa.quiz_id === q.id)
+          ).length;
+
+          const totalDone = doneMaterials + doneAssignments + doneQuizzes;
+          const progressPercentage = totalItems > 0 ? Math.round((totalDone / totalItems) * 100) : 0;
 
           return {
-            id: item.courses.id,
-            title: item.courses.title,
-            subject: item.courses.subject,
-            description: item.courses.description,
-            class_code: item.courses.class_code,
-            
-            // --- NAMA GURU DINAMIS ---
-            teacher: instructor?.full_name || "Guru Pengampu", 
-            
-            students: item.courses.course_members?.[0]?.count || 0, 
-            progress: item.progress || 0,
-            coverImage: item.courses.cover_image,
-            role: item.role 
+            id: course.id,
+            title: course.title,
+            subject: course.subject,
+            description: course.description,
+            class_code: course.class_code,
+            teacher: instructor?.full_name || "Guru Pengampu",
+            students: course.course_members?.[0]?.count || 0,
+            progress: progressPercentage,
+            coverImage: course.cover_image,
+            role: item.role
           };
         });
 
@@ -113,6 +93,12 @@ export default function MyCourses() {
     }
   };
 
+  // --- 2. USEEFFECT UNTUK MEMANGGIL FETCH ---
+  useEffect(() => {
+    fetchMyCourses();
+  }, []);
+
+  // --- 3. FUNGSI JOIN KELAS ---
   const handleJoinByCode = async () => {
     if (!joinCode.trim()) {
       alert("❌ Masukkan kode kelas terlebih dahulu");
@@ -121,8 +107,6 @@ export default function MyCourses() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // 1. Cari Course ID berdasarkan kode
       const { data: course, error: courseError } = await supabase
         .from('courses')
         .select('id')
@@ -131,14 +115,12 @@ export default function MyCourses() {
 
       if (courseError || !course) throw new Error("Kode kelas tidak ditemukan!");
 
-      // 2. Insert ke course_members sebagai student
       const { error: joinError } = await supabase
         .from('course_members')
         .insert([{ 
           user_id: user.id, 
           courses_id: course.id, 
-          role: 'student',
-          // progress: 0 
+          role: 'student'
         }]);
 
       if (joinError) {
@@ -149,7 +131,7 @@ export default function MyCourses() {
       alert("✅ Berhasil bergabung dengan kelas!");
       setJoinCode("");
       setShowModal(false);
-      fetchMyCourses(); // Refresh data
+      fetchMyCourses(); // Refresh data setelah join
     } catch (error) {
       alert("❌ " + error.message);
     }
@@ -161,7 +143,6 @@ export default function MyCourses() {
     course.teacher.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Loading State UI
   if (loading) {
     return (
       <div className="d-flex flex-column justify-content-center align-items-center vh-100 bg-light">
@@ -344,9 +325,16 @@ export default function MyCourses() {
                           <h5 className="fw-bold text-dark mb-2">{course.title}</h5>
                           <span className="badge" style={{ background: "#dbeafe", color: "#2563eb", padding: "6px 12px", borderRadius: "6px" }}>{course.subject}</span>
                         </div>
-                        <div className="text-end">
-                          <div className="small text-muted mb-1">Progress</div>
-                          <div className="fw-bold" style={{ color: "#2563eb", fontSize: "1.25rem" }}>{course.progress}%</div>
+                        <div className="progress" style={{ width: "60px", height: "6px", background: "#e5e7eb", borderRadius: "999px" }}>
+                          <div 
+                            className="progress-bar" 
+                            style={{ 
+                              width: `${course.progress || 0}%`, // Nilai Dinamis
+                              background: "linear-gradient(90deg, #2563eb, #16a34a)", 
+                              borderRadius: "999px",
+                              transition: "width 0.6s cubic-bezier(0.4, 0, 0.2, 1)" // Animasi halus
+                            }} 
+                          />
                         </div>
                       </div>
                       <p className="text-muted small mb-3">{course.description}</p>

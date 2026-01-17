@@ -69,9 +69,9 @@ export default function ManageCoursesUI() {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return; // Pastikan user.id ada sebelum lanjut
+      if (!user?.id) return;
 
-      // LANGKAH 1: Gunakan nama kolom yang konsisten (courses_id sesuai select Anda)
+      // LANGKAH 1: Ambil keanggotaan pengajar
       const { data: membershipData, error: memError } = await supabase
         .from("course_members")
         .select(`role, courses_id`)
@@ -84,10 +84,9 @@ export default function ManageCoursesUI() {
         return;
       }
 
-      // Ambil ID kelas (Pastikan menggunakan courses_id sesuai hasil select diatas)
       const courseIds = membershipData.map(m => m.courses_id).filter(id => id !== undefined);
 
-      // LANGKAH 2: Ambil detail kelas (Gunakan created_by sebagai ID pengajar)
+      // LANGKAH 2: Ambil detail kelas
       const { data: courseData, error: courseError } = await supabase
         .from("courses")
         .select("id, title, description, subject, class_code, cover_image, created_by")
@@ -95,9 +94,8 @@ export default function ManageCoursesUI() {
 
       if (courseError) throw courseError;
 
-      // LANGKAH 3: Ambil data profil berdasarkan created_by
+      // LANGKAH 3: Ambil data profil pengajar
       const teacherIds = [...new Set(courseData.map(c => c.created_by))].filter(id => id !== null);
-      
       const { data: profileData, error: profError } = await supabase
         .from("profiles")
         .select("id, full_name")
@@ -105,13 +103,28 @@ export default function ManageCoursesUI() {
 
       if (profError) throw profError;
 
+      // --- LANGKAH BARU (3.5): Ambil Jumlah Siswa ---
+      // Kita ambil semua member dari kelas-kelas ini yang rolenya 'student'
+      const { data: allMembers, error: memberCountError } = await supabase
+        .from("course_members")
+        .select("courses_id")
+        .in("courses_id", courseIds)
+        .eq("role", "student"); // Hanya hitung yang rolenya student
+
+      if (memberCountError) throw memberCountError;
+
       // LANGKAH 4: Gabungkan data
       const finalData = courseData.map(course => {
         const instructorProfile = profileData?.find(p => p.id === course.created_by);
+        
+        // Hitung jumlah siswa yang punya courses_id sama dengan course ini
+        const studentCount = allMembers?.filter(m => m.courses_id === course.id).length || 0;
+
         return {
           ...course,
           user_role: "teacher",
-          teacher_display_name: instructorProfile?.full_name || "Nama Pengajar"
+          teacher_display_name: instructorProfile?.full_name || "Nama Pengajar",
+          students: studentCount // Tambahkan properti students ke objek course
         };
       });
 
@@ -147,30 +160,39 @@ export default function ManageCoursesUI() {
 
 
   // 2. Logika Buat & Update Kelas
-  const handleSubmit = async () => {
+  const handleSubmit = async (cleanedData) => { // Terima cleanedData dari modal
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Tambahkan loading state jika kamu punya (opsional)
+      // setIsSaving(true);
+
       if (editingCourse) {
-        // UPDATE
+        // --- LOGIKA UPDATE ---
         const { error } = await supabase
           .from('courses')
           .update({
-            title: formData.title,
-            description: formData.description,
-            subject: formData.subject
+            title: cleanedData.title,
+            description: cleanedData.description,
+            subject: cleanedData.subject,
+            cover_image: cleanedData.cover_image // Link https:// dari storage
           })
           .eq('id', editingCourse.id);
+        
         if (error) throw error;
-        alert("Kelas berhasil diupdate!");
+        alert("✅ Kelas berhasil diupdate!");
       } else {
-        // CREATE
+        // --- LOGIKA CREATE ---
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        
         const { data: newCourse, error: cErr } = await supabase
           .from('courses')
           .insert([{ 
-            ...formData, 
+            title: cleanedData.title,
+            description: cleanedData.description,
+            subject: cleanedData.subject,
+            cover_image: cleanedData.cover_image, // Link https:// dari storage
             class_code: code, 
             created_by: user.id 
           }])
@@ -185,13 +207,19 @@ export default function ManageCoursesUI() {
           role: 'teacher' 
         }]);
         
-        alert(`Kelas dibuat! Kode: ${code}`);
+        alert(`✅ Kelas dibuat! Kode: ${code}`);
       }
-      setShowDialog(false);
-      setFormData({ title: "", description: "", subject: "" });
+
+      // Reset State
+      setShowDialog(false); // Sesuai nama state di kodemu
+      setEditingCourse(null);
+      setFormData({ title: "", description: "", subject: "", cover_image: "" });
       fetchCourses();
     } catch (err) {
-      alert(err.message);
+      console.error(err);
+      alert("Error: " + err.message);
+    } finally {
+      // setIsSaving(false);
     }
   };
 

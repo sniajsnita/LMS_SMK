@@ -1,8 +1,50 @@
-
+import React from "react"; // Pastikan React diimport
 import { Upload } from "lucide-react";
+import { supabase } from "../../lib/supabase"; // Import supabase untuk upload
 
 const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSubmit }) => {
   if (!show) return null;
+
+  // --- FUNGSI BARU UNTUK UPLOAD ---
+  const handleInternalSubmit = async () => {
+    try {
+      let finalImageUrl = formData.cover_image;
+
+      // Jika ada file gambar baru yang dipilih
+      if (formData.imageFile) {
+        const file = formData.imageFile;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        
+        // SESUAIKAN DI SINI: Nama folder 'cover/' ditambahkan sebelum nama file
+        const filePath = `cover/${fileName}`; 
+
+        // 1. Upload ke Bucket 'lms-files'
+        const { error: uploadError } = await supabase.storage
+          .from('lms-files') // Nama bucket kamu
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        // 2. Ambil URL Publik
+        const { data } = supabase.storage
+          .from('lms-files')
+          .getPublicUrl(filePath);
+
+        finalImageUrl = data.publicUrl;
+      }
+
+      // Gabungkan data dan kirim ke onSubmit
+      const cleanedData = { ...formData };
+      delete cleanedData.imageFile; 
+      cleanedData.cover_image = finalImageUrl;
+      
+      onSubmit(cleanedData); 
+    } catch (error) {
+      console.error("Upload detail:", error);
+      alert("Gagal mengunggah gambar: " + error.message);
+    }
+  };
 
   return (
     <>
@@ -73,9 +115,6 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
                     background: "#f8f9fa"
                   }}
                 />
-                <small className="text-muted">
-                  Anda dapat mengisi mata pelajaran dengan nama bebas
-                </small>
               </div>
 
               {/* Cover Image */}
@@ -85,7 +124,6 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
                 </label>
 
                 <div className="d-flex gap-2 align-items-center">
-                  {/* Input URL manual */}
                   <input
                     type="text"
                     className="form-control border-0 shadow-sm flex-grow-1"
@@ -101,7 +139,6 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
                     }}
                   />
 
-                  {/* Upload dari penyimpanan */}
                   <label
                     className="btn btn-outline-secondary"
                     style={{
@@ -119,8 +156,15 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
                         const file = e.target.files[0];
                         if (!file) return;
 
+                        // Gunakan Blob URL HANYA untuk preview visual saja
                         const previewUrl = URL.createObjectURL(file);
-                        setFormData({ ...formData, cover_image: previewUrl });
+                        
+                        // ✅ PERBAIKAN: Simpan preview untuk tampilan, dan file asli untuk diupload
+                        setFormData({ 
+                          ...formData, 
+                          cover_image: previewUrl,
+                          imageFile: file 
+                        });
                       }}
                     />
                   </label>
@@ -141,7 +185,6 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
                   </div>
                 )}
               </div>
-
             </div>
 
             <div className="modal-footer border-0 pt-0">
@@ -158,7 +201,7 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
               </button>
               <button 
                 className="btn btn-primary shadow-sm"
-                onClick={onSubmit}
+                onClick={handleInternalSubmit} // ✅ Menggunakan fungsi upload baru
                 disabled={!formData.title || !formData.subject}
                 style={{
                   background: !formData.title || !formData.subject 
@@ -177,7 +220,6 @@ const CourseModal = ({ show, editingCourse, formData, setFormData, onClose, onSu
         </div>
       </div>
 
-      {/* BACKDROP */}
       <div
         className="modal-backdrop fade show"
         onClick={onClose}
