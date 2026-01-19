@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Edit, Eye, Clock, FileText, Award } from "lucide-react";
+import { Trash2, Edit, Eye, Clock, FileText, Award, Calendar } from "lucide-react";
 import GradingView from '../grading/GradingView';
 
 const QuizItem = ({ quiz, onEdit, onDelete, onManageGrades }) => {
@@ -39,6 +39,13 @@ const QuizItem = ({ quiz, onEdit, onDelete, onManageGrades }) => {
             <small className="text-muted d-flex align-items-center gap-1">
               <FileText size={14} /> {quiz.questions_count || quiz.questions || 0} Soal
             </small>
+            <span className="text-muted d-flex align-items-center gap-1">
+            <span>•</span>
+              <Calendar size={14} /> 
+              Deadline: {quiz.end_date ? new Date(quiz.end_date).toLocaleDateString('id-ID') : '-'}
+            </span>
+            <span>•</span>
+            <span className="text-muted d-flex align-items-center gap-1">Percobaan: {quiz.attempts || 1}x</span>
           </div>
         </div>
 

@@ -57,39 +57,44 @@ const DiscussionItem = ({
             <div className="d-flex justify-content-between align-items-start mb-2">
               <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
                 <span className="fw-bold text-dark">{discussion.author}</span>
-                <span className="text-muted" style={{ fontSize: "0.75rem" }}>{discussion.date}</span>
                 {badge} {/* Badge dikirim dari parent */}
               </div>
               
               {/* AREA TANGGAL DAN TOMBOL EDIT/HAPUS (PINDAH KE SINI) */}
               <div className="d-flex align-items-center gap-2">
                 <span className="text-muted small d-flex align-items-center gap-1">
-                  <Clock size={12} />
-                  {discussion.date}
+                  <span className="text-muted" style={{ fontSize: "0.75rem" }}>
+                    {discussion.created_at ? new Date(discussion.created_at).toLocaleDateString('id-ID') : discussion.date}
+                    </span>
                 </span>
 
-                <div className="d-flex gap-1 border-start ps-2 ms-1" style={{ borderColor: '#dee2e6' }}>
-                  <button 
-                    className="btn btn-link text-primary p-1 shadow-none border-0" 
-                    onClick={() => onEdit(discussion)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button 
-                    className="btn btn-link text-danger p-1 shadow-none border-0" 
-                    onClick={() => onDelete(discussion.id)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                {currentUserId === discussion.user_id && (
+                  <div className="d-flex gap-1 border-start ps-2 ms-1" style={{ borderColor: '#dee2e6' }}>
+                    <button 
+                      className="btn btn-link text-primary p-1 shadow-none border-0" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(discussion); // Ini akan memicu modal di ManageCourses
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <Edit size={16} /> 
+                    </button>
+                    <button 
+                      className="btn btn-link text-danger p-1 shadow-none border-0" 
+                      onClick={() => onDelete(discussion.id)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             
             <h6 className="fw-bold text-primary mb-2">{discussion.title}</h6>
             <p className="text-secondary mb-3" style={{ fontSize: "0.95rem", lineHeight: "1.5" }}>
-              {discussion.content}
+              {discussion.description}
             </p>
 
             {/* Statistik & Like */}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { Link, useSearchParams } from "react-router-dom";
 import AssignmentModal from "../components/course/AssignmentModal";
+
 import {
   BookOpen,
   FileText,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 
 import ItemModal from "../components/course/ItemModal";
+import DiscussionItem from "../components/discussions/DiscussionItem";
 
 export default function CourseDetail() {
   const [activeTab, setActiveTab] = useState("materials");
@@ -192,20 +194,20 @@ export default function CourseDetail() {
         const discussionReplies = allReplies
           .filter(r => r.discussion_id === d.id)
           .map(r => ({
-            id: r.id,
+            ...r, // Mengambil semua data asli reply (id, user_id, dll)
             author_name: r.profiles?.full_name || "User",
-            content: r.content, // PERBAIKAN: Pastikan ini kolom konten reply, bukan deskripsi diskusi
-            user_id: r.user_id,
+            content: r.content,
             created_at: r.created_at
           }));
 
         return {
           ...d,
           author: profilesData.find(p => p.id === d.user_id)?.full_name || "Tanpa Nama",
-          replies: discussionReplies,
-          replies_count: discussionReplies.length,
-          is_liked: allLikes.some(l => l.discussion_id === d.id && l.user_id === currentUser?.id),
-          likes_count: allLikes.filter(l => l.discussion_id === d.id).length
+          // Gunakan nama-nama properti di bawah ini agar sinkron dengan DiscussionItem.jsx
+          allReplies: discussionReplies, 
+          repliesCount: discussionReplies.length, // PERBAIKAN: Ubah dari replies_count ke repliesCount
+          isLiked: allLikes.some(l => l.discussion_id === d.id && l.user_id === currentUser?.id), // PERBAIKAN: is_liked ke isLiked
+          likesCount: allLikes.filter(l => l.discussion_id === d.id).length // PERBAIKAN: likes_count ke likesCount
         };
       });
 
@@ -241,11 +243,11 @@ export default function CourseDetail() {
   };
 
   useEffect(() => {
-    // Hanya jalankan fetch jika ID course DAN currentUser sudah tersedia
+    // Pastikan id dari useParams dan currentUser dari auth sudah ada
     if (id && currentUser) {
       fetchAllCourseData(id);
     }
-  }, [id, currentUser]);
+  }, [id, currentUser]); // Dependency array yang benar untuk CourseDetail
 
   const handleOpenSubmitModal = (assignment) => {
     setSelectedAssignment(assignment);
@@ -396,29 +398,24 @@ export default function CourseDetail() {
     if (!error) fetchAllCourseData(id);
   };
 
-  const handleEditReply = async (reply) => {
-    // 1. Munculkan prompt untuk mengisi konten baru
-    const newContent = window.prompt("Edit balasan Anda:", reply.content);
-    
-    // 2. Validasi: Jika batal atau isinya kosong/sama, jangan lanjut
-    if (!newContent || newContent.trim() === "" || newContent === reply.content) return;
-
+  const handleEditReply = async (replyId, newContent) => {
     try {
-      // 3. Update ke tabel discussion_replies di Supabase
+      if (!replyId) return;
+
       const { error } = await supabase
         .from("discussion_replies")
-        .update({ content: newContent.trim() })
-        .eq("id", reply.id);
+        .update({ content: newContent })
+        .eq("id", replyId);
 
       if (error) throw error;
 
-      // 4. Refresh data agar tampilan terupdate
-      // Gunakan fungsi fetch data yang sudah kita buat tadi
-      fetchAllCourseData(id); 
+      // REFRESH DATA
+      if (id) {
+        fetchAllCourseData(id);
+      }
 
     } catch (err) {
-      console.error("Gagal mengedit balasan:", err.message);
-      alert("Gagal mengupdate balasan. Silakan coba lagi.");
+      console.error("Gagal edit:", err.message);
     }
   };
 
@@ -431,9 +428,27 @@ export default function CourseDetail() {
     alert(`➕ Tambah ${type} (fitur belum dihubungkan ke backend)`);
   };
 
-  const handleDeleteItem = (type, id) => {
+  const handleDeleteItem = async (type, itemId) => { // Saya ganti namanya jadi itemId agar tidak bingung
     if (window.confirm("Yakin ingin menghapus item ini?")) {
-      alert(`🗑️ ${type} dengan ID ${id} dihapus (dummy action)`);
+      try {
+        const { error } = await supabase
+          .from(type) 
+          .delete()
+          .eq("id", itemId);
+
+        if (error) throw error;
+
+        // PERBAIKAN DI SINI:
+        // Gunakan ID kelas (course), bukan ID item yang dihapus
+        if (course?.id) {
+          await fetchAllCourseData(course.id); 
+        }
+
+        alert("✅ Item berhasil dihapus!");
+      } catch (err) {
+        console.error("Gagal menghapus:", err.message);
+        alert("❌ Gagal menghapus item");
+      }
     }
   };
 
@@ -504,16 +519,9 @@ export default function CourseDetail() {
     setShowItemModal(true);
   };
 
-  const handleEditDiscussion = (discussion) => {
-    console.log("Edit diskusi:", discussion);
-    
-    // 1. Set item yang ingin diedit ke state editingItem
+  const handleEditItem = (discussion) => {
     setEditingItem(discussion);
-    
-    // 2. Set tipe modal ke "discussions"
     setItemModalType("discussions");
-    
-    // 3. Tampilkan modal
     setShowItemModal(true);
   };
 
@@ -524,15 +532,15 @@ export default function CourseDetail() {
     try {
       const discussionData = {
         title: formData.title,
-        // Gunakan fallback jika modal mengirim 'content' atau 'description'
         description: formData.description || formData.content || "",
         course_id: id,
         user_id: currentUser.id,
       };
 
+      // Ganti alert dengan return false saja, atau gunakan state error di modal
       if (!discussionData.description) {
-        alert("Isi diskusi tidak boleh kosong");
-        return false;
+        console.error("Isi diskusi tidak boleh kosong");
+        return false; 
       }
 
       if (editingItem) {
@@ -548,13 +556,22 @@ export default function CourseDetail() {
         if (error) throw error;
       }
 
+      // Refresh Data
       await fetchAllCourseData(id); 
+      
+      // RESET & TUTUP MODAL
       setEditingItem(null);
-      return true; // Berhasil!
+      if (typeof setShowItemModal === "function") {
+        setShowItemModal(false); // Pastikan state ini yang mengontrol tampilan modal Anda
+      }
+
+      alert(editingItem ? "✅ Diskusi berhasil diperbarui!" : "✅ Diskusi baru berhasil ditambahkan!");
+
+      return true; 
     } catch (err) {
-      console.error(err.message);
-      alert("Gagal: " + err.message);
-      return false; // Gagal!
+      console.error("Gagal simpan diskusi:", err.message);
+      // Hapus alert di sini agar tidak muncul pop-up localhost
+      return false;
     }
   };
 
@@ -918,6 +935,12 @@ export default function CourseDetail() {
                               </p>
                               
                               <div className="d-flex align-items-center gap-2 small text-muted mb-4">
+                                <small className="text-muted align-items-center gap-1">
+                                  <Clock size={14} /> {quiz.duration || "Tidak ada durasi"}
+                                </small>
+                                <small className="text-muted align-items-center gap-1">
+                                  <FileText size={14} /> {quiz.questions_count || quiz.questions || 0} Soal
+                                </small>
                                 <span>•</span>
                                 <span className="d-flex align-items-center gap-1">
                                   <Calendar size={14} /> 
@@ -970,12 +993,16 @@ export default function CourseDetail() {
             )}
 
 
-            {/* DISCUSSIONS TAB*/}
+            {/* DISCUSSIONS TAB */}
             {activeTab === "discussions" && (
               <div>
                 <div className="d-flex justify-content-between align-items-center mb-4">
                   <h5 className="fw-bold mb-0">💬 Forum Diskusi</h5>
-                  <button className="btn btn-primary d-flex align-items-center gap-2" style={{ borderRadius: "10px", padding: "8px 20px" }} onClick={handleAddDiscussion}>
+                  <button 
+                    className="btn btn-primary d-flex align-items-center gap-2" 
+                    style={{ borderRadius: "10px", padding: "8px 20px" }} 
+                    onClick={handleAddDiscussion}
+                  >
                     <Plus size={18} /> Buat Diskusi
                   </button>
                 </div>
@@ -988,143 +1015,22 @@ export default function CourseDetail() {
                     <p className="text-muted mb-0">Belum ada diskusi di kelas ini.</p>
                   </div>
                 ) : (
-                  <div className="d-flex flex-column gap-4">
-                    {discussions.map((discussion) => {
-                      const isOwner = currentUser?.id === discussion.user_id;
-                      const isExpanded = expandedDiscussions[discussion.id];
-                      const displayedReplies = isExpanded 
-                        ? discussion.replies 
-                        : (discussion.replies?.slice(0, 1) || []);
-
-                      return (
-                        <div key={discussion.id} className="card border-0 shadow-sm" style={{ borderRadius: "16px", border: "1px solid #f1f5f9" }}>
-                          <div className="card-body p-4">
-                            <div className="d-flex align-items-start gap-3">
-                              {/* Avatar */}
-                              <div className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
-                                style={{ width: "50px", height: "50px", flexShrink: 0, background: "linear-gradient(135deg, #2563eb, #16a34a)", fontSize: "1.2rem" }}>
-                                {(discussion.author || "A").charAt(0).toUpperCase()}
-                              </div>
-
-                              <div className="flex-grow-1">
-                                <div className="d-flex justify-content-between align-items-start mb-1">
-                                  <div>
-                                    <span className="fw-bold text-dark">{discussion.author}</span>
-                                    {isOwner && <span className="badge bg-light text-primary ms-2 fw-normal">Anda</span>}
-                                  </div>
-                                  
-                                  {/* AREA TANGGAL DAN ACTION BUTTONS */}
-                                  <div className="d-flex align-items-center gap-3">
-                                    <span className="text-muted small d-flex align-items-center gap-1">
-                                      <Clock size={12} />
-                                      {new Date(discussion.created_at).toLocaleDateString('id-ID')}
-                                    </span>
-                                    
-                                    {isOwner && (
-                                      <div className="d-flex gap-2 border-start ps-2" style={{ borderColor: '#e2e8f0' }}>
-                                        <Edit3 
-                                          size={16} 
-                                          className="text-primary" 
-                                          style={{ cursor: "pointer", opacity: 0.8 }} 
-                                          onClick={() => handleEditDiscussion(discussion)} 
-                                        />
-                                        <Trash2 
-                                          size={16} 
-                                          className="text-danger" 
-                                          style={{ cursor: "pointer", opacity: 0.8 }} 
-                                          onClick={() => handleDeleteItem("discussions", discussion.id)} 
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <h6 className="fw-bold text-primary mb-2">{discussion.title}</h6>
-                                <p className="text-secondary small mb-3">{discussion.content}</p>
-
-                                {/* Tombol Interaksi Utama (Like & Jumlah Balasan) */}
-                                <div className="d-flex justify-content-between align-items-center pt-3 border-top">
-                                  <div className="d-flex gap-3">
-                                    <button 
-                                      className="btn btn-sm d-flex align-items-center gap-2 border-0 bg-transparent p-0"
-                                      onClick={() => handleLikeDiscussion(discussion.id)}
-                                    >
-                                      <Heart 
-                                        size={20} 
-                                        className={discussion.is_liked ? "text-danger" : "text-secondary"} 
-                                        fill={discussion.is_liked ? "#ef4444" : "none"} 
-                                        style={{ transition: 'all 0.2s ease', cursor: 'pointer' }}
-                                      />
-                                      <span className={discussion.is_liked ? "text-danger fw-bold" : "text-secondary"}>
-                                        {discussion.likes_count || 0} Suka
-                                      </span>
-                                    </button>
-                                    
-                                    <div className="text-muted d-flex align-items-center gap-2 small">
-                                      <MessageSquare size={16} /> {discussion.replies_count || 0} Balasan
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* List Balasan */}
-                                {discussion.replies && discussion.replies.length > 0 && (
-                                  <div className="mt-3 ms-4 ps-3 border-start border-2" style={{ borderColor: '#f1f5f9' }}>
-                                    {displayedReplies.map((reply) => (
-                                      <div key={reply.id} className="bg-light p-3 rounded-4 mb-2 position-relative shadow-sm">
-                                        <div className="d-flex justify-content-between align-items-center mb-1">
-                                          <span className="fw-bold text-primary small">{reply.author_name}</span>
-                                          <div className="d-flex align-items-center gap-2">
-                                            <span className="text-muted" style={{ fontSize: '10px' }}>
-                                              {new Date(reply.created_at).toLocaleDateString('id-ID')}
-                                            </span>
-                                            {currentUser?.id === reply.user_id && (
-                                              <div className="d-flex gap-2 ms-1 border-start ps-2">
-                                                <Edit3 size={14} className="text-muted" style={{ cursor: "pointer" }} onClick={() => handleEditReply(reply)} />
-                                                <Trash2 size={14} className="text-danger" style={{ cursor: "pointer" }} onClick={() => handleDeleteReply(reply.id)} />
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <p className="small mb-1 text-dark">{reply.content}</p>
-                                      </div>
-                                    ))}
-
-                                    {discussion.replies.length > 1 && (
-                                      <button 
-                                        className="btn btn-link btn-sm text-decoration-none p-0 fw-bold mt-1"
-                                        onClick={() => toggleReplies(discussion.id)}
-                                      >
-                                        {isExpanded ? "Sembunyikan" : `Lihat ${discussion.replies.length - 1} balasan lainnya...`}
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Input Balasan */}
-                                <div className="mt-3 d-flex gap-2">
-                                  <input
-                                    type="text"
-                                    className="form-control form-control-sm border-0 bg-light"
-                                    placeholder="Tulis balasan..."
-                                    style={{ borderRadius: "8px", padding: "10px" }}
-                                    value={replyContent[discussion.id] || ""}
-                                    onChange={(e) => setReplyContent({ ...replyContent, [discussion.id]: e.target.value })}
-                                  />
-                                  <button 
-                                    className="btn btn-primary btn-sm px-3 shadow-sm" 
-                                    disabled={!replyContent[discussion.id]} 
-                                    onClick={() => handleReplyDiscussion(discussion.id)}
-                                    style={{ borderRadius: "8px", background: "linear-gradient(135deg, #2563eb, #16a34a)", border: "none" }}
-                                  >
-                                    Kirim
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="d-flex flex-column gap-2"> {/* Jarak antar card */}
+                    {discussions.map((discussion) => (
+                      <DiscussionItem
+                        key={discussion.id}
+                        discussion={discussion}
+                        currentUserId={currentUser?.id}
+                        replyContent={replyContent}
+                        onLike={handleLikeDiscussion}
+                        onReply={handleReplyDiscussion}
+                        onReplyChange={(id, value) => setReplyContent({ ...replyContent, [id]: value })}
+                        onEdit={handleEditItem}
+                        onDelete={() => handleDeleteItem("discussions", discussion.id)}
+                        onEditReply={handleEditReply}
+                        onDeleteReply={handleDeleteReply}
+                      />
+                    ))}
                   </div>
                 )}
               </div>

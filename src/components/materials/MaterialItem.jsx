@@ -17,6 +17,7 @@ const MaterialItem = ({ material, onEdit, onDelete }) => {
         {/* INFO MATERI */}
         <div className="flex-grow-1">
           <h6 className="mb-1 fw-semibold">{material.title}</h6>
+          <p className="text-muted mb-2" style={{ fontSize: "0.85rem", maxWidth: "520px", lineHeight: "1.4" }}>{material.description}</p>
           <small className="text-muted d-block mb-2">
             Tipe: {material.type} • Upload: {new Date(material.created_at || material.uploadDate).toLocaleDateString('id-ID')}
           </small>

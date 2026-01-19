@@ -48,6 +48,8 @@ export default function ManageCoursesUI() {
   // Discussion states
   const [likes, setLikes] = useState({});
   const [replyContent, setReplyContent] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loadingDiscussions, setLoadingDiscussions] = useState(true);
 
   // Add Item Modal states
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -67,6 +69,9 @@ export default function ManageCoursesUI() {
 
   const fetchCourses = async () => {
     setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) return;
@@ -247,8 +252,10 @@ export default function ManageCoursesUI() {
     fetchAssignments();
     fetchQuizzes();
     fetchMembers();
+    if (selectedCourse?.id && activeTab === "discussions") {
     fetchDiscussions();
-  }, [selectedCourse]);
+  }
+}, [selectedCourse?.id, activeTab]);
 
   const fetchMaterials = async () => {
     const { data, error } = await supabase
@@ -324,9 +331,12 @@ export default function ManageCoursesUI() {
   // FUNGSI FETCH DATA
   const fetchDiscussions = async () => {
     try {
-      // 1. Ambil user yang sedang login saat ini
+      setLoadingDiscussions(true);
+      
+      // 1. Ambil user login
       const { data: { user: currentUser } } = await supabase.auth.getUser();
 
+      // 2. Query ke database
       const { data, error } = await supabase
         .from("discussions")
         .select(`
@@ -343,9 +353,8 @@ export default function ManageCoursesUI() {
 
       if (error) throw error;
 
+      // 3. Formatter Data
       const formatted = data.map(d => {
-        // 2. LOGIKA KRUSIAL: Cek apakah ID user kita ada di dalam array discussion_likes
-        // Kita gunakan optional chaining (?.) untuk menghindari error jika data kosong
         const userHasLiked = d.discussion_likes?.some(
           (like) => like.user_id === currentUser?.id
         );
@@ -354,8 +363,9 @@ export default function ManageCoursesUI() {
           ...d,
           author: d.profiles?.full_name || "User",
           likesCount: d.discussion_likes?.length || 0,
-          isLiked: !!userHasLiked, // Mengubah hasil (true/false) menjadi boolean pasti
+          isLiked: !!userHasLiked,
           repliesCount: d.allReplies?.length || 0,
+          // Pastikan nama properti ini 'allReplies' agar terbaca oleh DiscussionItem.jsx
           allReplies: d.allReplies || []
         };
       });
@@ -363,6 +373,8 @@ export default function ManageCoursesUI() {
       setDiscussions(formatted);
     } catch (err) {
       console.error("Fetch Error:", err.message);
+    } finally {
+      setLoadingDiscussions(false);
     }
   };
 
@@ -459,9 +471,9 @@ export default function ManageCoursesUI() {
 
   // --- FUNGSI EDIT BALASAN ---
   const handleEditReply = async (replyId, newContent) => {
-    if (!newContent || !newContent.trim()) return;
-
     try {
+      if (!replyId) return;
+
       const { error } = await supabase
         .from("discussion_replies")
         .update({ content: newContent })
@@ -469,11 +481,14 @@ export default function ManageCoursesUI() {
 
       if (error) throw error;
 
-      // Refresh data agar UI terupdate
-      await fetchDiscussions();
+      // REFRESH DATA
+      // Gunakan fetchDiscussions() karena ini di halaman ManageCourses
+      if (selectedCourse?.id) {
+        fetchDiscussions(); 
+      }
+
     } catch (err) {
-      console.error(err);
-      alert("Gagal mengedit balasan");
+      console.error("Gagal edit:", err.message);
     }
   };
 
@@ -609,9 +624,7 @@ export default function ManageCoursesUI() {
 
       if (itemModalType === "discussions") {
         payload.user_id = user.id;
-        delete payload.file_url;
-        delete payload.file_path;
-      } 
+      }
       else if (itemModalType === "materials") {
         let finalType = (dataFromModal.type || "").toLowerCase();
         payload.type = finalType || (dataFromModal.file ? "file" : "link");
@@ -637,15 +650,17 @@ export default function ManageCoursesUI() {
 
       const savedData = await insertItemByType({ type: itemModalType, payload });
 
-      const updateState = (prev) => {
-        if (editingItem) return prev.map((item) => (item.id === editingItem.id ? { ...item, ...savedData } : item));
-        return [savedData, ...prev];
-      };
-
-      if (itemModalType === "materials") setMaterials(updateState);
-      if (itemModalType === "assignments") setAssignments(updateState);
-      if (itemModalType === "quizzes") setQuizzes(updateState);
-      if (itemModalType === "discussions") await fetchDiscussions();
+      if (itemModalType === "discussions") {
+        await fetchDiscussions(); // Panggil fungsi fetch agar data terbaru muncul
+      } else {
+        const updateState = (prev) => {
+          if (editingItem) return prev.map((item) => (item.id === editingItem.id ? { ...item, ...savedData } : item));
+          return [savedData, ...prev];
+        };
+        if (itemModalType === "materials") setMaterials(updateState);
+        if (itemModalType === "assignments") setAssignments(updateState);
+        if (itemModalType === "quizzes") setQuizzes(updateState);
+      }
 
       setShowItemModal(false);
       setEditingItem(null);
@@ -660,15 +675,14 @@ export default function ManageCoursesUI() {
 
   // --- HANDLER DELETE (PASTIKAN ASYNC DAN TERBUNGKUS BENAR) ---
   const handleDeleteItem = async ({ item, type }) => {
-    if (!window.confirm("Yakin ingin menghapus item ini?")) return;
+    if (!item || !window.confirm("Yakin ingin menghapus item ini?")) return;
     
     try {
-      // 1. Delete Storage jika ada
-      if (item.file_path) {
+      // Gunakan optional chaining ?. agar tidak error jika property tidak ada
+      if (item?.file_path) {
         await supabase.storage.from("lms-files").remove([item.file_path]);
       }
 
-      // 2. Delete Database
       const tableMap = {
         materials: "materials",
         assignments: "assignments",
@@ -683,17 +697,16 @@ export default function ManageCoursesUI() {
 
       if (error) throw error;
 
-      // 3. Update UI
-      const filterFn = (prev) => prev.filter(i => i.id !== item.id);
-      if (type === "materials") setMaterials(filterFn);
-      if (type === "assignments") setAssignments(filterFn);
-      if (type === "quizzes") setQuizzes(filterFn);
-      if (type === "discussions") setDiscussions(filterFn);
+      // REFRESH DATA
+      if (selectedCourse?.id) {
+        // Panggil fungsi fetch yang ada di ManageCourses
+        fetchDiscussions(); 
+      }
 
-      alert("✅ Item berhasil dihapus");
+      alert("✅ Berhasil menghapus!");
     } catch (err) {
       console.error(err);
-      alert("Gagal menghapus item: " + err.message);
+      alert("Gagal menghapus: " + err.message);
     }
   };
 
@@ -717,8 +730,11 @@ export default function ManageCoursesUI() {
   const subjects = [...new Set(courses.map(c => c.subject))];
 
   useEffect(() => {
-    // Auto select first course is removed for list view
-  }, []);
+    // Di ManageCourses, kita menggunakan selectedCourse.id dan fungsi fetchDiscussions
+    if (selectedCourse?.id && activeTab === "discussions") {
+      fetchDiscussions();
+    }
+  }, [selectedCourse?.id, activeTab]);
 
   // GRADING VIEW
   if (showGradingView && selectedAssignmentForGrading) {
@@ -905,25 +921,39 @@ export default function ManageCoursesUI() {
           )}
 
           {activeTab === "discussions" && (
-            <>
-              <SectionHeader 
-                title="Forum Diskusi" 
-                buttonLabel="Buat Diskusi"
-                onAdd={() => handleAddItem("discussions")}
-              />
-              {discussions.length === 0 ? (
-                <EmptyState icon={MessageSquare} message="Belum ada diskusi" />
+            <div>
+              <div className="d-flex justify-content-between align-items-center mb-4">
+                <h5 className="fw-bold mb-0">💬 Forum Diskusi</h5>
+                <button 
+                  className="btn btn-primary d-flex align-items-center gap-2" 
+                  style={{ borderRadius: "10px", padding: "8px 20px" }} 
+                  onClick={() => handleAddItem("discussions")} // Pastikan passing type
+                >
+                  <Plus size={18} /> Buat Diskusi
+                </button>
+              </div>
+
+              {loadingDiscussions ? (
+                <div className="text-center py-5 text-muted">
+                  <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                  Memuat diskusi...
+                </div>
+              ) : discussions.length === 0 ? (
+                <div className="text-center py-5 bg-light rounded-4 border border-dashed">
+                  <MessageSquare size={48} className="text-muted mb-3" style={{ opacity: 0.3 }} />
+                  <p className="text-muted mb-0">Belum ada diskusi di kelas ini.</p>
+                </div>
               ) : (
-                <div className="d-flex flex-column gap-4">
+                <div className="d-flex flex-column gap-2">
                   {discussions.map((discussion) => (
-                    <DiscussionItem 
+                    <DiscussionItem
                       key={discussion.id}
-                      discussion={discussion}
-                      likes={likes}
+                      discussion={discussion} // Kirim langsung karena sudah diformat di fetch
+                      currentUserId={currentUser?.id}
                       replyContent={replyContent}
                       onLike={handleLikeDiscussion}
                       onReply={handleReplyDiscussion}
-                      onReplyChange={handleEditReply}
+                      onReplyChange={(id, value) => setReplyContent({ ...replyContent, [id]: value })}
                       onEdit={() => handleEditItem("discussions", discussion)}
                       onDelete={() => handleDeleteItem({ item: discussion, type: "discussions" })}
                       onEditReply={handleEditReply}
@@ -932,7 +962,7 @@ export default function ManageCoursesUI() {
                   ))}
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {activeTab === "members" && (

@@ -13,6 +13,11 @@ import {
 const AssignmentItem = ({ assignment, onEdit, onDelete, onManageGrades }) => {
   const { fileType, fileUrl } = assignment;
 
+  const handleFileAction = (url) => {
+    if (!url) return alert("Link file tidak tersedia");
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div 
       className="list-group-item border-0 mb-3 shadow-sm"
@@ -32,49 +37,6 @@ const AssignmentItem = ({ assignment, onEdit, onDelete, onManageGrades }) => {
                 : assignment.description}
             </p>
           )}
-
-          {/* ================== CONTOH TAMPILAN FILE (STATIS) ================== */}
-          <div className="p-3 bg-light rounded mb-2">
-            <div className="fw-semibold mb-2 small text-muted">
-              📎 File yang Di-upload
-            </div>
-
-            {/* FILE PDF */}
-            <div className="d-flex align-items-center justify-content-between border rounded p-2 mb-2">
-              <div className="d-flex align-items-center gap-2">
-                <FileText className="text-danger" size={20} />
-                <span className="small">Laporan_Akhir.pdf</span>
-              </div>
-              <div className="d-flex gap-2">
-                <button className="btn btn-sm btn-outline-primary">
-                  <Eye size={14} /> Lihat
-                </button>
-              </div>
-            </div>
-
-            {/* FILE VIDEO */}
-            {/* <div className="d-flex align-items-center justify-content-between border rounded p-2 mb-2">
-              <div className="d-flex align-items-center gap-2">
-                <PlayCircle className="text-primary" size={20} />
-                <span className="small">Presentasi_Video.mp4</span>
-              </div>
-              <button className="btn btn-sm btn-outline-primary">
-                ▶ Preview Video
-              </button>
-            </div> */}
-
-            {/* FILE LINK */}
-            {/* <div className="d-flex align-items-center justify-content-between border rounded p-2">
-              <div className="d-flex align-items-center gap-2">
-                <Link2 className="text-success" size={20} />
-                <span className="small">Google Drive Link</span>
-              </div>
-              <button className="btn btn-sm btn-outline-success">
-                🔗 Buka Link
-              </button>
-            </div> */}
-          </div>
-          {/* ================================================================ */}
         </div>
 
         {/* ACTION BUTTON */}
@@ -86,6 +48,15 @@ const AssignmentItem = ({ assignment, onEdit, onDelete, onManageGrades }) => {
           >
             <Award size={16} />
             <span className="d-none d-md-inline">Kelola Nilai</span>
+          </button>
+
+          <button
+            className="btn btn-outline-success btn-sm"
+            onClick={() => handleFileAction(assignment.file_url || assignment.url)}
+            style={{ borderRadius: "8px" }}
+            title="Lihat"
+          >
+            <Eye size={16} />
           </button>
 
           <button
