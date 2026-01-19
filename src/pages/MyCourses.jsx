@@ -29,8 +29,8 @@ export default function MyCourses() {
           )
         `)
         .eq('user_id', user.id)
-        .eq('role', 'student')
-        .eq('courses.course_members.role', 'student');
+      .eq('role', 'student')
+      .eq('courses.course_members.role', 'student');
 
       if (error) throw error;
 

@@ -1197,6 +1197,7 @@ export default function CourseDetail() {
         </div>
       </div>
 
+      {/* MODAL SUBMIT ASSIGNMENT */}
       {/* Panggil Komponen Modal */}
       <AssignmentModal 
         show={showSubmitModal}
@@ -1209,7 +1210,7 @@ export default function CourseDetail() {
         isSubmitting={isSubmitting}
         onSubmit={handleSubmitAssignment}
       />
-
+      
       {/* ITEM MODAL */}
       <ItemModal
         show={showItemModal}
