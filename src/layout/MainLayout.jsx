@@ -3,7 +3,7 @@ import { Link, useLocation, Outlet, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
 import {
-  LayoutDashboard,Info,BookOpen,GraduationCap,FileText,MessageSquare,BarChart3,LogOut,User,Mail,Settings as SettingsIcon,Menu,X,Bell,ChevronDown,
+  LayoutDashboard,Info,BookOpen,GraduationCap,FileText,MessageSquare,BarChart3,LogOut,User,Mail,Settings,Menu,X,Bell,ChevronDown,
 } from "lucide-react";
 
 export default function MainLayout() {
@@ -11,34 +11,105 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
-  // State user diinisialisasi kosong
   const [user, setUser] = useState({
     full_name: "",
     email: "",
-    // user_type: ""
   });
 
-  // Ambil data dari Supabase Auth
+  // Dummy notifications data
+  const [notifications] = useState([
+    {
+      id: 1,
+      type: "assignment",
+      title: "Tugas Baru: Matematika",
+      message: "Tugas baru telah ditambahkan untuk mata pelajaran Matematika",
+      time: "5 menit yang lalu",
+      isRead: false
+    },
+    {
+      id: 2,
+      type: "discussion",
+      title: "Balasan Diskusi",
+      message: "Ada balasan baru pada diskusi 'Pengenalan React Hooks'",
+      time: "1 jam yang lalu",
+      isRead: false
+    },
+    {
+      id: 3,
+      type: "grade",
+      title: "Nilai Tersedia",
+      message: "Nilai tugas 'Algoritma Sorting' sudah tersedia",
+      time: "2 jam yang lalu",
+      isRead: false
+    },
+    {
+      id: 4,
+      type: "announcement",
+      title: "Pengumuman Kelas",
+      message: "Kelas Pemrograman Web akan dimulai 10 menit lebih awal besok",
+      time: "3 jam yang lalu",
+      isRead: true
+    },
+    {
+      id: 5,
+      type: "reminder",
+      title: "Pengingat Deadline",
+      message: "Deadline tugas Database akan berakhir dalam 2 hari",
+      time: "1 hari yang lalu",
+      isRead: true
+    }
+  ]);
+
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
         setUser({
-          // Prioritas: metadata full_name, jika tidak ada pakai email
           full_name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
           email: session.user.email,
-          // user_type: session.user.user_metadata?.user_type || "student"
         });
       } else {
-        // Jika tidak login, arahkan ke halaman login
         navigate("/login");
       }
     };
 
     fetchUser();
   }, [navigate]);
+
+  // Close sidebar when route changes on mobile
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
+
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isProfileOpen && !e.target.closest('.profile-dropdown-container')) {
+        setIsProfileOpen(false);
+      }
+      if (isNotificationOpen && !e.target.closest('.notification-container')) {
+        setIsNotificationOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProfileOpen, isNotificationOpen]);
+
+  // Get notification icon based on type
+  const getNotificationIcon = (type) => {
+    switch(type) {
+      case 'assignment': return FileText;
+      case 'discussion': return MessageSquare;
+      case 'grade': return BarChart3;
+      case 'announcement': return Info;
+      case 'reminder': return Bell;
+      default: return Bell;
+    }
+  };
 
   const menu = [
     { title: "Tentang Kami", path: "/about", icon: Info },
@@ -76,32 +147,35 @@ export default function MainLayout() {
           boxShadow: "2px 0 20px rgba(0, 0, 0, 0.05)",
           background: "rgba(255, 255, 255, 0.95)",
           backdropFilter: "blur(10px)",
+          left: 0,
+          top: 0,
         }}
       >
         {/* Close button for mobile */}
         <button
           className="btn btn-link d-lg-none position-absolute top-0 end-0 p-3"
           onClick={() => setIsSidebarOpen(false)}
+          style={{ zIndex: 1051 }}
         >
           <X size={24} />
         </button>
 
         {/* Logo */}
-        <div className="p-4 border-bottom flex-shrink-0" style={{ background: "linear-gradient(135deg, #eff6ff, #f0fdf4)" }}>
-          <div className="d-flex align-items-center gap-3">
+        <div className="p-3 p-sm-4 border-bottom flex-shrink-0" style={{ background: "linear-gradient(135deg, #eff6ff, #f0fdf4)" }}>
+          <div className="d-flex align-items-center gap-2 gap-sm-3">
             <div
               className="rounded-4 d-flex align-items-center justify-content-center shadow-sm p-2"
               style={{
-                width: "48px",
-                height: "48px",
+                width: "40px",
+                height: "40px",
                 background: "linear-gradient(135deg, #2563eb, #16a34a)",
               }}
             >
-              <GraduationCap size={28} className="text-white" />
+              <GraduationCap size={24} className="text-white" />
             </div>
-            <div>
-              <h5 className="mb-0 fw-bold text-dark">EduSpace</h5>
-              <small className="text-muted" style={{ fontSize: "0.75rem" }}>
+            <div className="overflow-hidden">
+              <h5 className="mb-0 fw-bold text-dark" style={{ fontSize: "1.1rem" }}>EduSpace</h5>
+              <small className="text-muted d-block text-truncate" style={{ fontSize: "0.7rem" }}>
                 {user?.user_type === "parent" ? "Portal Orang Tua" : "Platform Pembelajaran"}
               </small>
             </div>
@@ -110,13 +184,14 @@ export default function MainLayout() {
 
         {/* MENU */}
         <div 
-          className="p-3 flex-grow-1 overflow-y-auto overflow-x-hidden" 
+          className="p-2 p-sm-3 flex-grow-1 overflow-y-auto overflow-x-hidden" 
           style={{ 
             scrollbarWidth: "thin",
-            scrollbarColor: "#cbd5e1 transparent"
+            scrollbarColor: "#cbd5e1 transparent",
+            WebkitOverflowScrolling: "touch"
           }}
         >
-          <p className="text-muted text-uppercase small fw-semibold px-3 mb-2" style={{ fontSize: "0.7rem", letterSpacing: "0.5px" }}>
+          <p className="text-muted text-uppercase small fw-semibold px-3 mb-2" style={{ fontSize: "0.65rem", letterSpacing: "0.5px" }}>
             Menu Utama
           </p>
           <ul className="nav nav-pills flex-column gap-1 mb-3">
@@ -124,19 +199,20 @@ export default function MainLayout() {
               <li key={i} className="nav-item">
                 <Link
                   to={item.path}
-                  className={`nav-link d-flex align-items-center gap-3 position-relative ${
+                  className={`nav-link d-flex align-items-center gap-2 gap-sm-3 position-relative ${
                     location.pathname === item.path
                       ? "text-white"
                       : "text-dark"
                   }`}
                   style={{
                     borderRadius: "12px",
-                    padding: "12px 16px",
+                    padding: "10px 12px",
                     transition: "all 0.2s ease",
                     background: location.pathname === item.path
                       ? "linear-gradient(135deg, #2563eb, #16a34a)"
                       : "transparent",
                     fontWeight: location.pathname === item.path ? "600" : "500",
+                    fontSize: "0.9rem",
                   }}
                   onMouseEnter={(e) => {
                     if (location.pathname !== item.path) {
@@ -151,7 +227,7 @@ export default function MainLayout() {
                     }
                   }}
                 >
-                  <item.icon size={20} />
+                  <item.icon size={18} style={{ flexShrink: 0 }} />
                   <span className="flex-grow-1">{item.title}</span>
                   {item.badge && (
                     <span
@@ -159,8 +235,9 @@ export default function MainLayout() {
                       style={{
                         background: location.pathname === item.path ? "rgba(255, 255, 255, 0.3)" : "#ef4444",
                         color: "white",
-                        fontSize: "0.7rem",
-                        padding: "4px 8px",
+                        fontSize: "0.65rem",
+                        padding: "3px 7px",
+                        flexShrink: 0,
                       }}
                     >
                       {item.badge}
@@ -173,10 +250,10 @@ export default function MainLayout() {
         </div>
 
         {/* User Profile Footer */}
-        <div className="border-top p-4 flex-shrink-0">
+        <div className="border-top p-3 p-sm-4 flex-shrink-0 profile-dropdown-container">
           <div className="position-relative">
             <button
-              className="btn btn-light w-100 d-flex align-items-center gap-3 p-3 border-0"
+              className="btn btn-light w-100 d-flex align-items-center gap-2 gap-sm-3 p-2 p-sm-3 border-0"
               style={{
                 borderRadius: "12px",
                 background: "#f8f9fa",
@@ -193,19 +270,19 @@ export default function MainLayout() {
               <div
                 className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
                 style={{
-                  width: "40px",
-                  height: "40px",
+                  width: "36px",
+                  height: "36px",
                   background: "linear-gradient(135deg, #2563eb, #16a34a)",
-                  fontSize: "1rem",
+                  fontSize: "0.9rem",
                 }}
               >
                 {user.full_name?.charAt(0) || "U"}
               </div>
               <div className="flex-grow-1 text-start overflow-hidden">
-                <p className="mb-0 fw-semibold small text-dark text-truncate">{user.full_name}</p>
-                <p className="mb-0 text-muted text-truncate" style={{ fontSize: "0.75rem" }}>{user.email}</p>
+                <p className="mb-0 fw-semibold small text-dark text-truncate" style={{ fontSize: "0.85rem" }}>{user.full_name}</p>
+                <p className="mb-0 text-muted text-truncate" style={{ fontSize: "0.7rem" }}>{user.email}</p>
               </div>
-              <ChevronDown size={16} className="text-muted" />
+              <ChevronDown size={14} className="text-muted flex-shrink-0" />
             </button>
 
             {/* Dropdown Menu */}
@@ -220,6 +297,7 @@ export default function MainLayout() {
                   style={{
                     borderBottom: "1px solid #e5e7eb",
                     transition: "background 0.2s ease",
+                    fontSize: "0.85rem",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "#f8f9fa";
@@ -228,7 +306,7 @@ export default function MainLayout() {
                     e.currentTarget.style.background = "white";
                   }}
                 >
-                  <User size={16} />
+                  <User size={16} style={{ flexShrink: 0 }} />
                   <span className="small">Profil Saya</span>
                 </Link>
                 <Link
@@ -237,6 +315,7 @@ export default function MainLayout() {
                   style={{
                     borderBottom: "1px solid #e5e7eb",
                     transition: "background 0.2s ease",
+                    fontSize: "0.85rem",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "#f8f9fa";
@@ -245,11 +324,11 @@ export default function MainLayout() {
                     e.currentTarget.style.background = "white";
                   }}
                 >
-                  <Mail size={16} />
+                  <Mail size={16} style={{ flexShrink: 0 }} />
                   <span className="small">Undangan</span>
                   <span
                     className="badge rounded-pill bg-danger position-absolute"
-                    style={{ fontSize: "0.65rem", top: "50%", right: "12px", transform: "translateY(-50%)" }}
+                    style={{ fontSize: "0.6rem", top: "50%", right: "12px", transform: "translateY(-50%)" }}
                   >
                     3
                   </span>
@@ -260,6 +339,7 @@ export default function MainLayout() {
                   style={{
                     borderBottom: "1px solid #e5e7eb",
                     transition: "background 0.2s ease",
+                    fontSize: "0.85rem",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "#f8f9fa";
@@ -268,7 +348,7 @@ export default function MainLayout() {
                     e.currentTarget.style.background = "white";
                   }}
                 >
-                  <SettingsIcon size={16} />
+                  <Settings size={16} style={{ flexShrink: 0 }} />
                   <span className="small">Pengaturan</span>
                 </Link>
                 <button
@@ -276,13 +356,11 @@ export default function MainLayout() {
                   style={{
                     borderRadius: "0 0 12px 12px",
                     transition: "background 0.2s ease",
+                    fontSize: "0.85rem",
                   }}
                   onClick={() => {
-                    // kalau nanti pakai auth, logout di sini
-                    // localStorage.removeItem("token");
-
                     navigate("/login");
-                }}
+                  }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "#fef2f2";
                   }}
@@ -290,7 +368,7 @@ export default function MainLayout() {
                     e.currentTarget.style.background = "transparent";
                   }}
                 >
-                  <LogOut size={16} />
+                  <LogOut size={16} style={{ flexShrink: 0 }} />
                   <span className="small">Keluar</span>
                 </button>
               </div>
@@ -303,13 +381,23 @@ export default function MainLayout() {
       <div
         className="flex-fill d-flex flex-column main-content"
         style={{
-            marginLeft: "280px",
-            transition: "margin-left 0.3s ease",
+          marginLeft: "0",
+          transition: "margin-left 0.3s ease",
+          width: "100%",
         }}
-        >
+      >
+        <style>{`
+          @media (min-width: 992px) {
+            .main-content {
+              margin-left: 280px !important;
+              width: calc(100% - 280px) !important;
+            }
+          }
+        `}</style>
+
         {/* HEADER */}
         <header
-          className="bg-white border-bottom px-4 py-3 sticky-top"
+          className="bg-white border-bottom px-3 px-sm-4 py-2 py-sm-3 sticky-top"
           style={{
             background: "rgba(255, 255, 255, 0.95)",
             backdropFilter: "blur(10px)",
@@ -317,51 +405,189 @@ export default function MainLayout() {
           }}
         >
           <div className="d-flex align-items-center justify-content-between">
-            <div className="d-flex align-items-center gap-3">
+            <div className="d-flex align-items-center gap-2 gap-sm-3 overflow-hidden">
               <button
-                className="btn btn-light d-lg-none p-2 border-0"
+                className="btn btn-light d-lg-none p-2 border-0 flex-shrink-0"
                 style={{ borderRadius: "10px" }}
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               >
                 <Menu size={20} />
               </button>
-              <h4 className="mb-0 fw-bold text-dark">
+              <h4 className="mb-0 fw-bold text-dark text-truncate" style={{ fontSize: "clamp(1rem, 4vw, 1.5rem)" }}>
                 {menu.find(m => m.path === location.pathname)?.title || ""}
               </h4>
             </div>
-            <div className="d-flex align-items-center gap-3">
-              <button
-                className="btn btn-light position-relative p-2 border-0"
-                style={{
-                  borderRadius: "10px",
-                  transition: "all 0.2s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#eff6ff";
-                  e.currentTarget.style.color = "#2563eb";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "#f8f9fa";
-                  e.currentTarget.style.color = "#212529";
-                }}
-              >
-                <Bell size={20} />
-                <span
-                  className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                  style={{ fontSize: "0.6rem", padding: "3px 6px" }}
+            <div className="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-0">
+              <div className="position-relative notification-container">
+                <button
+                  className="btn btn-light position-relative p-2 border-0"
+                  style={{
+                    borderRadius: "10px",
+                    transition: "all 0.2s ease",
+                  }}
+                  onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#eff6ff";
+                    e.currentTarget.style.color = "#2563eb";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#f8f9fa";
+                    e.currentTarget.style.color = "#212529";
+                  }}
                 >
-                  5
-                </span>
-              </button>
-              <Link to="/profile" className="text-decoration-none">
+                  <Bell size={18} />
+                  {notifications.filter(n => !n.isRead).length > 0 && (
+                    <span
+                      className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                      style={{ fontSize: "0.6rem", padding: "2px 5px" }}
+                    >
+                      {notifications.filter(n => !n.isRead).length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification Dropdown */}
+                {isNotificationOpen && (
+                  <div
+                    className="position-absolute bg-white border rounded-3 shadow-lg"
+                    style={{
+                      top: "calc(100% + 8px)",
+                      right: 0,
+                      width: "320px",
+                      maxWidth: "90vw",
+                      maxHeight: "400px",
+                      zIndex: 1000,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Header */}
+                    <div className="px-3 py-2 border-bottom bg-light">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <h6 className="mb-0 fw-bold">Notifikasi</h6>
+                        <span className="badge bg-primary rounded-pill" style={{ fontSize: "0.7rem" }}>
+                          {notifications.filter(n => !n.isRead).length} Baru
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Notification List */}
+                    <div 
+                      className="overflow-y-auto"
+                      style={{
+                        maxHeight: "320px",
+                        scrollbarWidth: "thin",
+                        scrollbarColor: "#cbd5e1 transparent"
+                      }}
+                    >
+                      {notifications.length === 0 ? (
+                        <div className="text-center py-4 text-muted">
+                          <Bell size={32} className="mb-2 opacity-50" />
+                          <p className="mb-0 small">Tidak ada notifikasi</p>
+                        </div>
+                      ) : (
+                        notifications.map((notif) => {
+                          const NotifIcon = getNotificationIcon(notif.type);
+                          return (
+                            <div
+                              key={notif.id}
+                              className="px-3 py-2 border-bottom"
+                              style={{
+                                background: notif.isRead ? "white" : "#eff6ff",
+                                cursor: "pointer",
+                                transition: "background 0.2s ease"
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = "#f8f9fa";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = notif.isRead ? "white" : "#eff6ff";
+                              }}
+                            >
+                              <div className="d-flex gap-2 align-items-start">
+                                <div
+                                  className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                                  style={{
+                                    width: "32px",
+                                    height: "32px",
+                                    background: notif.isRead
+                                      ? "#e5e7eb"
+                                      : "linear-gradient(135deg, #2563eb, #16a34a)",
+                                  }}
+                                >
+                                  <NotifIcon size={14} className={notif.isRead ? "text-muted" : "text-white"} />
+                                </div>
+
+                                <div className="flex-grow-1 overflow-hidden">
+                                  <p className="mb-0 fw-semibold text-dark text-truncate" style={{ fontSize: "0.85rem" }}>
+                                    {notif.title}
+                                  </p>
+                                  <p className="mb-1 text-muted small" style={{ fontSize: "0.75rem", lineHeight: "1.4" }}>
+                                    {notif.message}
+                                  </p>
+                                  <p className="mb-0 text-muted" style={{ fontSize: "0.7rem" }}>
+                                    {notif.time}
+                                  </p>
+                                </div>
+
+                                {/* Area kanan: indikator + tombol hapus */}
+                                <div className="d-flex flex-column align-items-center gap-1">
+                                  {!notif.isRead && (
+                                    <div
+                                      className="rounded-circle bg-primary"
+                                      style={{ width: "8px", height: "8px" }}
+                                    />
+                                  )}
+
+                                  {/* Tombol hapus (UI only) */}
+                                  <div
+                                    className="rounded-circle d-flex align-items-center justify-content-center"
+                                    style={{
+                                      width: "20px",
+                                      height: "20px",
+                                      cursor: "pointer",
+                                      background: "#f1f5f9",
+                                    }}
+                                    title="Hapus notifikasi"
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = "#fee2e2")}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                                  >
+                                    <X size={12} className="text-muted" />
+                                  </div>
+                                </div>
+                              </div>
+
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    {notifications.length > 0 && (
+                      <div className="px-3 py-2 border-top bg-light text-center">
+                        <Link
+                          to="/notifications"
+                          className="text-decoration-none small fw-semibold"
+                          style={{ color: "#2563eb" }}
+                        >
+                          Lihat Semua Notifikasi
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <Link to="/profile" className="text-decoration-none d-none d-sm-block">
                 <div
                   className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
                   style={{
-                    width: "40px",
-                    height: "40px",
+                    width: "36px",
+                    height: "36px",
                     background: "linear-gradient(135deg, #2563eb, #16a34a)",
                     cursor: "pointer",
                     transition: "all 0.2s ease",
+                    fontSize: "0.9rem",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "scale(1.1)";
@@ -380,7 +606,7 @@ export default function MainLayout() {
         </header>
 
         {/* CONTENT */}
-        <main className="flex-fill overflow-auto">
+        <main className="flex-fill overflow-auto p-3 p-sm-4">
           <Outlet />
         </main>
       </div>

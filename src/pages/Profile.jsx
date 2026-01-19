@@ -189,9 +189,9 @@ export default function ProfilePage() {
               <p className="text-muted mb-3 d-flex align-items-center gap-2">
                 <Mail size={16} /> {userAuth?.email}
               </p>
-              <span className="badge" style={{ background: "rgba(37, 99, 235, 0.1)", color: "#2563eb", padding: "8px 16px", borderRadius: "8px", fontSize: "0.875rem", fontWeight: "600" }}>
+              {/* <span className="badge" style={{ background: "rgba(37, 99, 235, 0.1)", color: "#2563eb", padding: "8px 16px", borderRadius: "8px", fontSize: "0.875rem", fontWeight: "600" }}>
                 👨‍🎓 Siswa
-              </span>
+              </span> */}
             </div>
 
             <button className="btn btn-outline-primary d-flex align-items-center gap-2" onClick={() => isEditing ? handleCancel() : setIsEditing(true)} style={{ borderRadius: "12px", padding: "10px 24px", fontWeight: "600" }}>

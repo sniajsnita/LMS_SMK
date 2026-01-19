@@ -169,11 +169,11 @@ export default function Discussions() {
           <h1 className="fw-bold display-6 mb-2">💬 Forum Diskusi</h1>
           <p className="text-muted mb-0">Berkolaborasi dan berdiskusi dengan siswa lainnya</p>
         </div>
-        <button className="btn btn-primary d-flex align-items-center gap-2 shadow-sm" 
+        {/* <button className="btn btn-primary d-flex align-items-center gap-2 shadow-sm" 
           onClick={() => { setEditingId(null); setShowNewDialog(true); }} 
           style={{ background: "linear-gradient(135deg, #2563eb, #16a34a)", border: "none", padding: "12px 24px", borderRadius: "12px", fontWeight: "600" }}>
           <Plus size={20} /> Buat Diskusi
-        </button>
+        </button> */}
       </div>
 
       {/* SEARCH & FILTER */}
