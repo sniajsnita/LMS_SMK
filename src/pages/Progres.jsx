@@ -256,11 +256,48 @@ export default function Progress() {
         </div>
       </div>
 
-      {/* PROGRESS PER CLASS */}
+      {/* PROGRESS AKTIFITAS SISWA PER CLASS */}
       <div className="card shadow-sm mb-4">
         <div className="card-header fw-bold">
           <TrendingUp size={18} className="me-2 text-primary" />
           {classes[0]?.isTeacher ? "Monitoring Aktivitas Siswa" : "Progress per Kelas"}
+        </div>
+        <div className="card-body">
+          {classes.map((cls) => (
+            <div key={cls.id} className="mb-4">
+              <div className="d-flex justify-content-between mb-1">
+                <div>
+                  <strong>{cls.title}</strong>
+                  <div className="text-muted small">{cls.subject}</div>
+                </div>
+                <span className="badge bg-light text-dark">
+                  {cls.isTeacher ? `${cls.percent}% Terkumpul` : `${cls.completed}/${cls.total} Tugas`}
+                </span>
+              </div>
+
+              <div className="progress mb-1" style={{ height: 10 }}>
+                <div
+                  className="progress-bar bg-success"
+                  style={{ width: `${cls.percent}%` }}
+                />
+              </div>
+
+              <small className="text-muted">
+                {cls.isTeacher 
+                  ? `Rata-rata penyelesaian tugas oleh seluruh siswa di kelas ini`
+                  : `${cls.completed} dari ${cls.total} tugas dikerjakan`
+                }
+              </small>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* PROGRESS TUGAS DAN KUIS PER CLASS YANG DIIKUTI */}
+      <div className="card shadow-sm mb-4">
+        <div className="card-header fw-bold">
+          <TrendingUp size={18} className="me-2 text-primary" />
+          {classes[0]?.isTeacher ? "Monitoring Progres Tugas dan Kuis" : "Progress per Kelas"}
         </div>
         <div className="card-body">
           {classes.map((cls) => (
