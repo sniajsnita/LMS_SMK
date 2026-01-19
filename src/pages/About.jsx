@@ -281,8 +281,8 @@ export default function About() {
       <h2 className="text-center fw-bold mb-4 display-6">Galeri Sekolah</h2>
       <div className="row g-4 mb-5">
         {[
-          { img: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=400", label: "Gedung Utama" },
-          { img: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400", label: "Ruang Kelas" },
+          { img: "https://cdn-sekolah.annibuku.com/20252208/2.jpg", label: "Gedung Utama" },
+          { img: "https://assets-a1.kompasiana.com/items/album/2026/01/05/copy-of-29-695b2c5fed64151c5f57bb62.jpg", label: "Ruang Kelas" },
           { img: "https://images.unsplash.com/photo-1581092921461-eab62e97a780?w=400", label: "Laboratorium" }
         ].map((item, i) => (
           <div className="col-md-4" key={i}>
