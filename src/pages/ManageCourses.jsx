@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Plus, Users, BookOpen, FileText, Award, MessageSquare } from "lucide-react";
 
 // Import Components
@@ -21,6 +21,7 @@ import GradingView from "../components/grading/GradingView";
 
 export default function ManageCoursesUI() {
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState("materials");
   const [showDialog, setShowDialog] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
@@ -66,6 +67,16 @@ export default function ManageCoursesUI() {
   const [discussions, setDiscussions] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Cek apakah ada data kelas yang dikirim dari Dashboard
+    if (location.state?.selectedCourse) {
+      setSelectedCourse(location.state.selectedCourse);
+      
+      // Bersihkan state agar saat refresh tidak nyangkut terus (opsional)
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   const fetchCourses = async () => {
     setLoading(true);

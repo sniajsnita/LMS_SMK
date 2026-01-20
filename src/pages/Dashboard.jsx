@@ -285,7 +285,13 @@ export default function Dashboard() {
               ) : (
                 <div className="d-grid gap-3">
                   {enrolledCourses.map((course) => (
-                    <Link to={`/course/${course.id}`} key={course.id} className="text-decoration-none">
+                    <Link
+                      to={course.role === 'teacher' ? `/manage-course` : `/course-detail?id=${course.id}`} 
+                      key={course.id} 
+                      className="text-decoration-none"
+                      // TITIPKAN DATA DISINI:
+                      state={{ selectedCourse: course }} 
+                    >
                       <div 
                         className="border rounded-4 p-3 p-md-4 bg-white" 
                         style={{ transition: "all 0.3s ease" }}
