@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Search, MessageSquare } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import DiscussionItem from "../components/discussions/DiscussionItem"; // Pastikan path file benar
+import DiscussionItem from "../components/discussions/DiscussionItem";
 
 export default function Discussions() {
-  // --- STATE DASAR ---
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -12,13 +11,12 @@ export default function Discussions() {
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [replyContent, setReplyContent] = useState({});
 
-  // --- STATE FORM & EDIT ---
+  // State untuk form (textarea tetap menggunakan nama 'content' agar tidak bingung dengan isi input)
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(""); 
   const [courseId, setCourseId] = useState("");
   const [editingId, setEditingId] = useState(null);
 
-  // --- STATE DATA ---
   const [courses, setCourses] = useState([]);
   const [discussions, setDiscussions] = useState([]);
 
@@ -28,10 +26,27 @@ export default function Discussions() {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      const { data: coursesData } = await supabase.from("courses").select("id, title");
-      setCourses(coursesData || []);
+      if (user) {
+        // AMBIL KELAS YANG DIIKUTI SAJA
+        const { data: enrolledData, error } = await supabase
+          .from("course_members")
+          .select(`
+            courses_id,
+            courses (
+              id,
+              title
+            )
+          `)
+          .eq("user_id", user.id);
 
-      await fetchDiscussions(user?.id);
+        if (!error && enrolledData) {
+          // Transformasi data agar formatnya sama dengan state courses sebelumnya
+          const myCourses = enrolledData.map(item => item.courses);
+          setCourses(myCourses);
+        }
+
+        await fetchDiscussions(user.id);
+      }
       setLoading(false);
     };
     init();
@@ -61,18 +76,69 @@ export default function Discussions() {
         user_id: d.user_id,
         author: d.author?.full_name || "User",
         course: d.course?.title || "Umum",
-        course_id: d.course_id,
-        date: new Date(d.created_at).toLocaleDateString('id-ID'), // Sesuai prop 'date' di DiscussionItem
-        title: d.title,
-        content: d.content,
-        likesCount: d.likes?.length || 0, // Sesuai prop di DiscussionItem
-        isLiked: d.likes?.some(l => l.user_id === currentUserId), // Sesuai prop di DiscussionItem
+        course_id: d.course_id, // Pastikan ini terisi untuk filter
+        date: new Date(d.created_at).toLocaleDateString('id-ID'),
+        title: d.title || "",
+        description: d.description || "", // MENGAMBIL KOLOM 'description' DARI DB
+        likesCount: d.likes?.length || 0,
+        isLiked: d.likes?.some(l => l.user_id === currentUserId),
         repliesCount: d.replies?.length || 0,
-        allReplies: d.replies || [] // Sesuai prop 'allReplies' di DiscussionItem
+        allReplies: d.replies || [] 
       }));
       setDiscussions(formatted);
     }
   };
+
+  const handleEdit = (d) => {
+    setEditingId(d.id);
+    setTitle(d.title);
+    // Masukkan d.description ke state content textarea
+    setContent(d.description); 
+    setCourseId(d.course_id);
+    setShowNewDialog(true);
+  };
+
+  const handleCreateOrUpdate = async () => {
+    if (title && content && courseId && currentUser) {
+      const payload = { 
+        title, 
+        description: content, // Kirim ke kolom 'description' di DB
+        course_id: courseId, 
+        user_id: currentUser.id 
+      };
+      
+      let res;
+      if (editingId) {
+        res = await supabase.from("discussions").update(payload).eq("id", editingId);
+      } else {
+        res = await supabase.from("discussions").insert(payload);
+      }
+
+      if (!res.error) {
+        setShowNewDialog(false);
+        setEditingId(null);
+        setTitle(""); setContent(""); setCourseId("");
+        fetchDiscussions(currentUser.id);
+      }
+    }
+  };
+
+  // --- LOGIKA FILTER (DIPERBAIKI) ---
+  const filteredDiscussions = discussions.filter(d => {
+    // Filter Kelas: Hanya munculkan diskusi dari kelas yang dipilih di dropdown
+    const matchesCourse = selectedCourse === "all" 
+      ? true 
+      : String(d.course_id) === String(selectedCourse);
+    
+    // Filter Search
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = 
+      (d.title?.toLowerCase() || "").includes(query) ||
+      (d.description?.toLowerCase() || "").includes(query);
+
+    return matchesCourse && matchesSearch;
+  });
+
 
   // --- LOGIKA AKSI ---
   const handleLike = async (discussionId) => {
@@ -91,36 +157,6 @@ export default function Discussions() {
     if (window.confirm("Apakah Anda yakin ingin menghapus diskusi ini?")) {
       const { error } = await supabase.from("discussions").delete().eq("id", discussionId);
       if (!error) fetchDiscussions(currentUser.id);
-    }
-  };
-
-  const handleEdit = (d) => {
-    setEditingId(d.id);
-    setTitle(d.title);
-    setContent(d.content);
-    setCourseId(d.course_id);
-    setShowNewDialog(true);
-  };
-
-  const handleCreateOrUpdate = async () => {
-    if (title && content && courseId && currentUser) {
-      const payload = { title, content, course_id: courseId, user_id: currentUser.id };
-      let error;
-      
-      if (editingId) {
-        const { error: err } = await supabase.from("discussions").update(payload).eq("id", editingId);
-        error = err;
-      } else {
-        const { error: err } = await supabase.from("discussions").insert(payload);
-        error = err;
-      }
-
-      if (!error) {
-        setShowNewDialog(false);
-        setEditingId(null);
-        setTitle(""); setContent(""); setCourseId("");
-        fetchDiscussions(currentUser.id);
-      }
     }
   };
 
@@ -153,13 +189,6 @@ export default function Discussions() {
       .eq("id", replyId);
     if (!error) fetchDiscussions(currentUser?.id);
   };
-
-  const filteredDiscussions = discussions.filter(d => {
-    const matchesCourse = selectedCourse === "all" || String(d.course_id) === String(selectedCourse);
-    const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          d.content.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCourse && matchesSearch;
-  });
 
   return (
     <div className="p-3 p-md-4 p-lg-5">
