@@ -279,13 +279,34 @@ export default function ManageCoursesUI() {
   };
 
   const fetchAssignments = async () => {
-    const { data, error } = await supabase
-      .from("assignments")
-      .select("*")
-      .eq("course_id", selectedCourse.id)
-      .order("created_at", { ascending: false });
+    try {
+      // 1. Ambil data assignment dan hitung jumlah baris di tabel 'submissions'
+      const { data, error } = await supabase
+        .from("assignments")
+        .select(`
+          *,
+          submissions(count) 
+        `)
+        .eq("course_id", selectedCourse.id)
+        .order("created_at", { ascending: false });
 
-    if (!error) setAssignments(data);
+      if (error) throw error;
+
+      // 2. Format data untuk ditampilkan di UI
+      const formatted = data.map(asg => ({
+        ...asg,
+        // Jumlah yang sudah mengumpulkan dari tabel 'submissions'
+        submitted: asg.submissions?.[0]?.count || 0,
+        
+        // Menghitung total siswa dari state 'members' (yang datanya dari 'course_members')
+        // Kita cari member yang rolenya 'student' atau 'Siswa' (sesuai hasil format di fetchMembers)
+        total: members.filter(m => m.role === 'Siswa' || m.role === 'student').length || 0
+      }));
+
+      setAssignments(formatted);
+    } catch (err) {
+      console.error("Error fetching assignments:", err.message);
+    }
   };
 
   const fetchQuizzes = async () => {

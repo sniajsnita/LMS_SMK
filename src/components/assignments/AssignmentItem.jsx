@@ -7,7 +7,8 @@ import {
   Download, 
   PlayCircle, 
   Link2, 
-  FileText 
+  FileText,
+  Clock 
 } from "lucide-react";
 
 const AssignmentItem = ({ assignment, onEdit, onDelete, onManageGrades }) => {
@@ -25,13 +26,31 @@ const AssignmentItem = ({ assignment, onEdit, onDelete, onManageGrades }) => {
     >
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
         <div className="flex-grow-1">
-          <h6 className="mb-1 fw-semibold">{assignment.title}</h6>
-          <small className="text-muted d-block mb-1">
-            Deadline: {assignment.deadline} • Submitted: {assignment.submitted || 0}/{assignment.total || 0}
-          </small>
+          <h6 className="mb-2 fw-bold text-dark" style={{ letterSpacing: '-0.3px' }}>
+            {assignment.title}
+          </h6>
+          
+          <div className="d-flex flex-wrap gap-3 mb-3">
+            {/* Tanggal yang sudah dipercantik */}
+            <div className="d-flex align-items-center gap-1 text-muted small">
+              <Clock size={14} className="text-danger" />
+              <span>
+                {assignment.deadline 
+                  ? new Date(assignment.deadline).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : "-"}
+              </span>
+            </div>
+
+            {/* Indikator Pengumpulan */}
+            <div className="d-flex align-items-center gap-1 small">
+              <div className={`badge ${assignment.submitted > 0 ? 'bg-success-subtle text-success' : 'bg-light text-muted'} border-0`}>
+                {assignment.submitted || 0} / {assignment.total || 0} Terkumpul
+              </div>
+            </div>
+          </div>
 
           {assignment.description && (
-            <p className="text-muted small mb-2" style={{ fontSize: "0.85rem" }}>
+            <p className="text-secondary mb-0" style={{ fontSize: "0.875rem", lineHeight: "1.5" }}>
               {assignment.description.length > 100
                 ? `${assignment.description.substring(0, 100)}...`
                 : assignment.description}
