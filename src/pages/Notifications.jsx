@@ -328,6 +328,8 @@ const NotificationsUI = () => {
                                   Terima Undangan
                                 </button>
                               )}
+
+                              
                               {/* {notification.link && !isParentInvitation && (
                                 <button className="btn btn-gradient-blue btn-sm fw-medium shadow">
                                   Lihat Detail
