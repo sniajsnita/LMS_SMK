@@ -6,8 +6,9 @@ import {
   Award,
   EyeOff,
   Lock,
+  Clock
 } from "lucide-react";
-import { supabase } from "../lib/supabase"; // Pastikan path supabase.js benar
+import { supabase } from "../lib/supabase";
 
 export default function Progress() {
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,6 @@ export default function Progress() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Ambil data enrollment user yang sedang login untuk mendapatkan Role dan Daftar Kelas
       const { data: userEnrollments, error: enrollError } = await supabase
         .from("course_members")
         .select("courses_id, role")
@@ -34,110 +34,62 @@ export default function Progress() {
       if (enrollError) throw enrollError;
       if (!userEnrollments || userEnrollments.length === 0) return setLoading(false);
 
-      // Ambil role dari salah satu baris enrollment (asumsi satu user satu role umum)
-      const isTeacher = userEnrollments.some(en => en.role === "teacher");
       const enrolledCourseIds = userEnrollments.map(en => en.courses_id);
 
-      // 2. Ambil data kelas dan tugas
       const { data: coursesData, error: courseError } = await supabase
         .from("courses")
         .select(`
-          id, title,
-          assignments (
-            id,
-            title
-          )
+          id, title, subject,
+          assignments ( id, title )
         `)
         .in("id", enrolledCourseIds);
 
       if (courseError) throw courseError;
 
-      // 3. Ambil data pengumpulan (Submissions)
-      let submissionQuery = supabase.from("submissions").select("id, assignment_id, user_id, grade");
-      
-      // Jika Guru: Ambil semua submission di kelas-kelas tersebut
-      // Jika Siswa: Hanya ambil submission miliknya sendiri
-      if (isTeacher) {
-        const allAssignmentIds = coursesData.flatMap(c => c.assignments.map(a => a.id));
-        submissionQuery = submissionQuery.in("assignment_id", allAssignmentIds);
-      } else {
-        submissionQuery = submissionQuery.eq("user_id", user.id);
-      }
+      const { data: submissions, error: subError } = await supabase
+        .from("submissions")
+        .select("id, assignment_id, user_id, grade, updated_at")
+        .in("assignment_id", coursesData.flatMap(c => c.assignments.map(a => a.id)));
 
-      const { data: submissions, error: subError } = await submissionQuery;
       if (subError) throw subError;
 
-      // 4. Hitung jumlah siswa per kelas (Hanya jika Guru)
-      let studentCountMap = {};
-      if (isTeacher) {
-        const { data: allEnrollments, error: allEnrollError } = await supabase
-          .from("course_members")
-          .select("courses_id, role")
-          .in("courses_id", enrolledCourseIds);
-
-        if (allEnrollError) throw allEnrollError;
-
-        // Hitung hanya yang role-nya 'student'
-        allEnrollments.forEach(en => {
-          // Gunakan .toString() untuk memastikan ID konsisten saat jadi Key Object
-          const cId = en.courses_id.toString(); 
-          if (en.role === "student") {
-            studentCountMap[cId] = (studentCountMap[cId] || 0) + 1;
-          }
-        });
-      }
+      // Ambil data semua member untuk hitung total siswa per kelas (untuk guru)
+      const { data: allMembers } = await supabase
+        .from("course_members")
+        .select("courses_id, role");
 
       let totalGraded = 0;
       let totalPercentSum = 0;
 
-      // 5. Olah Data untuk UI
       const formattedClasses = coursesData.map((course) => {
-        const cId = course.id.toString();
+        // Tentukan role user di kelas spesifik ini
+        const myRole = userEnrollments.find(en => en.courses_id === course.id)?.role;
+        const isTeacher = myRole === "teacher";
+        
         const courseAsgIds = course.assignments?.map(a => a.id) || [];
         const totalTasks = courseAsgIds.length;
         
-        // --- TAMBAHKAN BAGIAN INI UNTUK MENGHITUNG TUGAS DINILAI ---
-        const gradedInThisCourse = submissions?.filter(s => 
-          courseAsgIds.includes(s.assignment_id) && s.grade !== null
-        ).length || 0;
-        
-        totalGraded += gradedInThisCourse; // Akumulasi ke variabel di atas map
-        // ---------------------------------------------------------
+        // Hitung tugas yang sudah dinilai (milik user jika siswa, milik semua jika guru)
+        const mySubmissions = isTeacher 
+          ? submissions.filter(s => courseAsgIds.includes(s.assignment_id))
+          : submissions.filter(s => courseAsgIds.includes(s.assignment_id) && s.user_id === user.id);
 
-        let percent = 0;
-        let completed = 0;
-        let totalRequirement = 0;
+        const gradedCount = mySubmissions.filter(s => s.grade !== null).length;
+        totalGraded += (isTeacher ? 0 : gradedCount); // Hanya hitung tugas pribadi yang dinilai untuk statistik
+
+        let completed = mySubmissions.length;
+        let totalRequirement = totalTasks;
 
         if (isTeacher) {
-          const totalStudentsInClass = studentCountMap[cId] || 0;
-          totalRequirement = totalTasks * totalStudentsInClass;
-          completed = submissions?.filter(s => 
-            courseAsgIds.includes(s.assignment_id)
-          ).length || 0;
-        } else {
-          totalRequirement = totalTasks;
-          completed = submissions?.filter(s => 
-            courseAsgIds.includes(s.assignment_id)
-          ).length || 0;
+          const studentCount = allMembers.filter(m => m.courses_id === course.id && m.role === "student").length;
+          totalRequirement = totalTasks * studentCount;
         }
 
-        percent = totalRequirement > 0 ? Math.round((completed / totalRequirement) * 100) : 0;
+        const percent = totalRequirement > 0 ? Math.round((completed / totalRequirement) * 100) : 0;
         totalPercentSum += percent;
 
-        // Letakkan ini tepat sebelum baris "return {" di dalam formattedClasses.map
-        // console.log(`--- DEBUG KELAS: ${course.title} ---`);
-        // console.log(`1. Total Tugas dari Guru : ${totalTasks} tugas`);
-        // console.log(`2. Total Siswa di Kelas  : ${isTeacher ? (studentCountMap[cId] || 0) : "N/A (Siswa Mode)"}`);
-        // console.log(`3. Target Pengumpulan    : ${totalRequirement} (Tugas x Siswa)`);
-        // console.log(`4. Sudah Dikumpulkan     : ${completed} submission`);
-        // console.log(`5. Sudah Dinilai Guru    : ${gradedInThisCourse} submission`);
-        // console.log(`6. Persentase Progress   : ${percent}%`);
-        // console.log(`-------------------------------------------`);
-
         return {
-          id: course.id,
-          title: course.title,
-          subject: isTeacher ? "Monitoring Kelas" : "Materi Terkait",
+          ...course,
           completed,
           total: totalRequirement,
           percent,
@@ -145,43 +97,23 @@ export default function Progress() {
         };
       });
 
-      // 6. Hitung statistik untuk kartu ringkasan (Stats)
-      const averageProgress = formattedClasses.length > 0 
-        ? Math.round(totalPercentSum / formattedClasses.length) 
-        : 0;
-
-      // 7. Ambil Riwayat Penilaian Terbaru (Untuk ditampilkan di tabel bawah)
-      const recentData = submissions
-        .filter(sub => sub.grade !== null) // Hanya yang sudah ada nilai
-        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-        .slice(0, 5)
-        .map(sub => {
-          // Cari judul tugas berdasarkan assignment_id
-          const taskTitle = coursesData
-            .flatMap(c => c.assignments)
-            .find(asg => asg.id === sub.assignment_id)?.title || "Tugas";
-          
-          return {
-            updated_at: sub.updated_at,
-            assignment_title: taskTitle
-          };
-        });
-
-      // 8. Update State Akhir
       setClasses(formattedClasses);
-      setRecentGraded(recentData);
+      setRecentGraded(submissions.filter(s => s.user_id === user.id && s.grade !== null).slice(0, 5));
       setStats({
         totalClasses: formattedClasses.length,
-        avgProgress: averageProgress,
+        avgProgress: formattedClasses.length > 0 ? Math.round(totalPercentSum / formattedClasses.length) : 0,
         gradedTasks: totalGraded
       });
 
-      } catch (error) {
-        console.error("Error Detail:", error);
-      } finally {
-        setLoading(false);
-      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const teacherClasses = classes.filter(cls => cls.isTeacher);
+  const studentClasses = classes.filter(cls => !cls.isTeacher);
 
   if (loading) return <div className="container py-5 text-center">Memuat data progress...</div>;
 
@@ -256,78 +188,69 @@ export default function Progress() {
         </div>
       </div>
 
-      {/* PROGRESS AKTIFITAS SISWA PER CLASS */}
-      <div className="card shadow-sm mb-4">
-        <div className="card-header fw-bold">
-          <TrendingUp size={18} className="me-2 text-primary" />
-          {classes[0]?.isTeacher ? "Monitoring Aktivitas Siswa" : "Progress per Kelas"}
-        </div>
-        <div className="card-body">
-          {classes.map((cls) => (
-            <div key={cls.id} className="mb-4">
-              <div className="d-flex justify-content-between mb-1">
-                <div>
-                  <strong>{cls.title}</strong>
-                  <div className="text-muted small">{cls.subject}</div>
-                </div>
-                <span className="badge bg-light text-dark">
-                  {cls.isTeacher ? `${cls.percent}% Terkumpul` : `${cls.completed}/${cls.total} Tugas`}
-                </span>
-              </div>
-
-              <div className="progress mb-1" style={{ height: 10 }}>
-                <div
-                  className="progress-bar bg-success"
-                  style={{ width: `${cls.percent}%` }}
-                />
-              </div>
-
-              <small className="text-muted">
-                {cls.isTeacher 
-                  ? `Rata-rata penyelesaian tugas oleh seluruh siswa di kelas ini`
-                  : `${cls.completed} dari ${cls.total} tugas dikerjakan`
-                }
-              </small>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* PROGRESS TUGAS DAN KUIS PER CLASS YANG DIIKUTI */}
-      <div className="card shadow-sm mb-4">
-        <div className="card-header fw-bold">
-          <TrendingUp size={18} className="me-2 text-primary" />
-          {classes[0]?.isTeacher ? "Monitoring Progres Tugas dan Kuis" : "Progress per Kelas"}
-        </div>
-        <div className="card-body">
-          {classes.map((cls) => (
-            <div key={cls.id} className="mb-4">
-              <div className="d-flex justify-content-between mb-1">
-                <div>
-                  <strong>{cls.title}</strong>
-                  <div className="text-muted small">{cls.subject}</div>
-                </div>
-                <span className="badge bg-light text-dark">
-                  {cls.isTeacher ? `${cls.percent}% Terkumpul` : `${cls.completed}/${cls.total} Tugas`}
-                </span>
+      <div className="row">
+        {/* --- CARD MONITORING (GURU) --- */}
+        {teacherClasses.length > 0 && (
+          <div className="col-12">
+            <div className="card shadow-sm border-0 mb-4" style={{ borderRadius: "15px" }}>
+              <div className="card-header bg-white py-3 fw-bold d-flex align-items-center border-0">
+                <TrendingUp size={18} className="me-2 text-primary" />
+                Monitoring Progres Tugas & Kuis (Sebagai Guru)
               </div>
-
-              <div className="progress mb-1" style={{ height: 10 }}>
-                <div
-                  className="progress-bar bg-success"
-                  style={{ width: `${cls.percent}%` }}
-                />
+              <div className="card-body">
+                {teacherClasses.map((cls) => (
+                  <div key={cls.id} className="mb-4">
+                    <div className="d-flex justify-content-between mb-1">
+                      <div>
+                        <strong className="d-block">{cls.title}</strong>
+                        <div className="text-muted small">{cls.subject}</div>
+                      </div>
+                      <span className="badge bg-primary-subtle text-primary align-self-start">
+                        {cls.percent}% Terkumpul
+                      </span>
+                    </div>
+                    <div className="progress mb-1" style={{ height: 8, borderRadius: 10 }}>
+                      <div className="progress-bar bg-primary" style={{ width: `${cls.percent}%` }} />
+                    </div>
+                    <small className="text-muted">Rata-rata penyelesaian tugas oleh seluruh siswa</small>
+                  </div>
+                ))}
               </div>
-
-              <small className="text-muted">
-                {cls.isTeacher 
-                  ? `Rata-rata penyelesaian tugas oleh seluruh siswa di kelas ini`
-                  : `${cls.completed} dari ${cls.total} tugas dikerjakan`
-                }
-              </small>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* --- CARD PROGRES KELAS (SISWA) --- */}
+        {studentClasses.length > 0 && (
+          <div className="col-12">
+            <div className="card shadow-sm border-0 mb-4" style={{ borderRadius: "15px" }}>
+              <div className="card-header bg-white py-3 fw-bold d-flex align-items-center border-0">
+                <TrendingUp size={18} className="me-2 text-success" />
+                Progres Belajar Saya (Sebagai Siswa)
+              </div>
+              <div className="card-body">
+                {studentClasses.map((cls) => (
+                  <div key={cls.id} className="mb-4">
+                    <div className="d-flex justify-content-between mb-1">
+                      <div>
+                        <strong className="d-block">{cls.title}</strong>
+                        <div className="text-muted small">{cls.subject}</div>
+                      </div>
+                      <span className="badge bg-success-subtle text-success align-self-start">
+                        {cls.completed}/{cls.total} Tugas
+                      </span>
+                    </div>
+                    <div className="progress mb-1" style={{ height: 8, borderRadius: 10 }}>
+                      <div className="progress-bar bg-success" style={{ width: `${cls.percent}%` }} />
+                    </div>
+                    <small className="text-muted">{cls.completed} dari {cls.total} tugas telah dikerjakan</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* RECENT GRADED */}
