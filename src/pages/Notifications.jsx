@@ -328,11 +328,11 @@ const NotificationsUI = () => {
                                   Terima Undangan
                                 </button>
                               )}
-                              {notification.link && !isParentInvitation && (
+                              {/* {notification.link && !isParentInvitation && (
                                 <button className="btn btn-gradient-blue btn-sm fw-medium shadow">
                                   Lihat Detail
                                 </button>
-                              )}
+                              )} */}
                               {!notification.is_read && (
                                 <button className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2">
                                   ✓
