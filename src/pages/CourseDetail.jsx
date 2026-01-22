@@ -352,6 +352,37 @@ export default function CourseDetail() {
     }
   };
 
+  const handleCancelSubmission = async (assignmentId) => {
+    // Konfirmasi ke user agar tidak tidak sengaja terhapus
+    if (!window.confirm("Apakah Anda yakin ingin membatalkan pengumpulan? File yang sudah diunggah akan dihapus.")) return;
+
+    try {
+      const { error } = await supabase
+        .from("submissions")
+        .delete()
+        .match({ 
+          assignment_id: assignmentId, 
+          user_id: currentUser.id 
+        });
+
+      if (error) throw error;
+
+      // OPTIMISTIC UPDATE: Langsung update UI tanpa refresh
+      setAssignments((prev) =>
+        prev.map((asg) =>
+          asg.id === assignmentId 
+            ? { ...asg, submissions: [] } // Kosongkan array submissions
+            : asg
+        )
+      );
+
+      alert("Pengumpulan berhasil dibatalkan.");
+    } catch (error) {
+      console.error("Gagal membatalkan pengumpulan:", error.message);
+      alert("Terjadi kesalahan: " + error.message);
+    }
+  };
+
   const handleLikeDiscussion = async (discussionId) => {
     if (!currentUser) return alert("Silakan login dulu");
 
@@ -919,10 +950,9 @@ export default function CourseDetail() {
                                         borderRadius: "10px",
                                         transition: "all 0.2s ease"
                                       }}
-                                      onClick={() => {
-                                        // Handler untuk batalkan pengumpulan
-                                        console.log('Batalkan pengumpulan:', assignment.id);
-                                      }}
+                                      // HUBUNGKAN KE FUNGSI DI ATAS
+                                      onClick={() => handleCancelSubmission(assignment.id)} 
+                                      
                                       onMouseEnter={(e) => {
                                         e.currentTarget.style.background = "#fef2f2";
                                       }}
