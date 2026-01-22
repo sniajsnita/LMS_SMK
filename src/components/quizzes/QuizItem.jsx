@@ -45,7 +45,9 @@ const QuizItem = ({ quiz, onEdit, onDelete, onManageGrades }) => {
               Deadline: {quiz.end_date ? new Date(quiz.end_date).toLocaleDateString('id-ID') : '-'}
             </span>
             <span>•</span>
-            <span className="text-muted d-flex align-items-center gap-1">Percobaan: {quiz.attempts || 1}x</span>
+            <span className="d-flex align-items-center gap-1">
+              <Award size={14} /> Percobaan: {quiz.attempts_limit || 1}x
+            </span>
           </div>
         </div>
 

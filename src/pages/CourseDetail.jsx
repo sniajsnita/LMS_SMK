@@ -108,9 +108,15 @@ export default function CourseDetail() {
           `)
           .eq("course_id", courseId)
           .eq("quiz_attempts.user_id", currentUser?.id),
-        supabase.from("discussions").select("*").eq("course_id", courseId).order("created_at", { ascending: false }),
+        supabase
+          .from("discussions")
+          .select(`
+            *,
+            discussion_likes(user_id) 
+          `)
+          .eq("course_id", courseId)
+          .order("created_at", { ascending: false }),
         supabase.from("course_members").select("id, user_id, role").eq("courses_id", courseId),
-        supabase.from("discussion_likes").select("discussion_id").eq("user_id", currentUser?.id)
       ]);
 
       // Buat daftar ID materi yang sudah selesai agar mudah dicari
@@ -179,35 +185,52 @@ export default function CourseDetail() {
         };
       });
 
-      // B. Kuis (PERBAIKAN: Mapping kuis belum ada di kodemu sebelumnya)
+      // B. Kuis
       const formattedQuizzes = (qzs.data || []).map(quiz => {
-        const userAttempt = quiz.quiz_attempts?.[0];
+        // Hitung jumlah percobaan user ini untuk kuis ini
+        const userAttemptsCount = quiz.quiz_attempts?.length || 0;
+        
+        // Ambil data percobaan terakhir (untuk skor)
+        const lastAttempt = quiz.quiz_attempts?.[userAttemptsCount - 1];
+
         return {
           ...quiz,
-          status: userAttempt ? "completed" : (quiz.is_locked ? "locked" : "available"),
-          score: userAttempt?.score || null
+          // Gunakan userAttemptsCount untuk status dan counter
+          user_attempts: userAttemptsCount, 
+          status: userAttemptsCount > 0 ? "completed" : (quiz.is_locked ? "locked" : "available"),
+          score: lastAttempt?.score || null
         };
       });
 
       // C. Diskusi
       const formattedDiscussions = (discs.data || []).map(d => {
+        const likes = d.discussion_likes || [];
+        
+        // 1. Memproses Reply (Gunakan hasil filter ini)
         const discussionReplies = allReplies
           .filter(r => r.discussion_id === d.id)
           .map(r => ({
-            ...r, // Mengambil semua data asli reply (id, user_id, dll)
+            ...r,
             author_name: r.profiles?.full_name || "User",
             content: r.content,
             created_at: r.created_at
           }));
 
+        // 2. Mendapatkan User ID dengan aman
+        // Terkadang currentUser belum siap saat fetch, pastikan ambil dari auth jika perlu
+        const currentUserId = currentUser?.id;
+
         return {
           ...d,
           author: profilesData.find(p => p.id === d.user_id)?.full_name || "Tanpa Nama",
-          // Gunakan nama-nama properti di bawah ini agar sinkron dengan DiscussionItem.jsx
-          allReplies: discussionReplies, 
-          repliesCount: discussionReplies.length, // PERBAIKAN: Ubah dari replies_count ke repliesCount
-          isLiked: allLikes.some(l => l.discussion_id === d.id && l.user_id === currentUser?.id), // PERBAIKAN: is_liked ke isLiked
-          likesCount: allLikes.filter(l => l.discussion_id === d.id).length // PERBAIKAN: likes_count ke likesCount
+          
+          // CEK DISINI: Pastikan perbandingan ID benar-benar jalan
+          isLiked: likes.some(l => String(l.user_id) === String(currentUserId)),
+          
+          likesCount: likes.length,
+          
+          // PERBAIKAN: Gunakan variabel discussionReplies yang di atas, bukan d.discussion_replies
+          allReplies: discussionReplies 
         };
       });
 
@@ -330,45 +353,52 @@ export default function CourseDetail() {
   };
 
   const handleLikeDiscussion = async (discussionId) => {
-    if (!currentUser) return alert("Silakan login terlebih dahulu");
+    if (!currentUser) return alert("Silakan login dulu");
 
     const targetDisc = discussions.find((d) => d.id === discussionId);
-    const isCurrentlyLiked = targetDisc.is_liked;
+    const isCurrentlyLiked = targetDisc?.isLiked;
 
-    // OPTIMISTIC UPDATE (Ubah angka di UI langsung)
+    // 1. Update UI secara instan (Optimistic)
     setDiscussions((prev) =>
       prev.map((d) =>
         d.id === discussionId
           ? {
               ...d,
-              is_liked: !isCurrentlyLiked,
-              likes_count: isCurrentlyLiked
-                ? Math.max(0, (d.likes_count || 0) - 1)
-                : (d.likes_count || 0) + 1,
+              isLiked: !isCurrentlyLiked,
+              likesCount: isCurrentlyLiked 
+                ? Math.max(0, d.likesCount - 1) 
+                : d.likesCount + 1,
             }
           : d
       )
     );
 
+    // 2. Simpan ke Database
     try {
       if (isCurrentlyLiked) {
-        // Hapus data suka
+        // DELETE: Pastikan nama kolom di match sesuai DB
         await supabase
           .from("discussion_likes")
           .delete()
-          .match({ discussion_id: discussionId, user_id: currentUser.id });
+          .match({ 
+            discussion_id: discussionId, 
+            user_id: currentUser.id 
+          });
       } else {
-        // Tambah data suka
-        const { error } = await supabase
+        // INSERT: Gunakan array [] untuk insert
+        await supabase
           .from("discussion_likes")
-          .insert({ discussion_id: discussionId, user_id: currentUser.id });
-        
-        if (error && error.code !== '23505') throw error;
+          .insert([
+            { 
+              discussion_id: discussionId, 
+              user_id: currentUser.id 
+            }
+          ]);
       }
-      // Tidak perlu update tabel discussions karena kolomnya tidak ada
     } catch (err) {
-      console.error("Gagal update like:", err.message);
-      fetchAllCourseData(id); // Balikkan ke data asli jika gagal
+      console.error("Gagal simpan like:", err);
+      // Kembalikan ke posisi awal jika gagal total
+      fetchAllCourseData(id);
     }
   };
 
@@ -487,24 +517,24 @@ export default function CourseDetail() {
     }
 
     try {
-      // 3. Catat percobaan ke database (karena percobaan cuma 1x)
       const { error } = await supabase
         .from('quiz_attempts')
         .insert([
           { 
             quiz_id: quiz.id, 
             user_id: currentUser.id, 
-            score: 0 // Nilai default 0 saat mulai, bisa diupdate nanti jika ada sistem nilai otomatis
+            score: 0 
           }
         ]);
 
       if (error) throw error;
 
-      // 4. Buka link kuis di tab baru
+      // Buka link kuis
       window.open(quiz.link, "_blank");
 
-      // 5. Refresh data agar tombol langsung berubah jadi "Selesai"
-      await fetchAllCourseData(course);
+      // PERBAIKAN DI SINI:
+      // Gunakan 'id' (variabel yang diambil dari useSearchParams di atas)
+      await fetchAllCourseData(id); 
 
     } catch (error) {
       console.error("Gagal memulai kuis:", error.message);
@@ -965,13 +995,23 @@ export default function CourseDetail() {
                                 <small className="text-muted align-items-center gap-1">
                                   <FileText size={14} /> {quiz.questions_count || quiz.questions || 0} Soal
                                 </small>
-                                <span>•</span>
                                 <span className="d-flex align-items-center gap-1">
                                   <Calendar size={14} /> 
                                   Deadline: {quiz.end_date ? new Date(quiz.end_date).toLocaleDateString('id-ID') : '-'}
                                 </span>
-                                <span>•</span>
-                                <span>Percobaan: {quiz.attempts || 1}x</span>
+                                <span className="d-flex align-items-center gap-1">
+                                  <Award size={14} /> 
+                                  Percobaan: 
+                                  <span className={
+                                    (quiz.user_attempts >= (quiz.attempts_limit || 1)) 
+                                    ? "text-danger fw-bold" 
+                                    : "text-primary"
+                                  }>
+                                    {/* Gunakan user_attempts yang sudah dihitung di mapping */}
+                                    {quiz.user_attempts || 0}/{quiz.attempts_limit || 1}
+                                  </span>
+                                  x
+                                </span>
                               </div>
 
                               {/* TOMBOL / BADGE DI BAWAH */}

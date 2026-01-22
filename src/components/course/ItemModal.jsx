@@ -30,7 +30,8 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
           startDate: editingItem.start_date ? editingItem.start_date.substring(0, 16) : "",
           endDate: editingItem.end_date ? editingItem.end_date.substring(0, 16) : "",
           passingGrade: editingItem.passing_grade || "",
-          attempts: editingItem.attempts_limit || "",
+          link: editingItem.link || "",
+          attempts_limit: editingItem.attempts_limit || "",
           quizType: editingItem.quiz_type || "",
           randomize: editingItem.randomize || false,
           showResults: editingItem.show_results || false
@@ -58,7 +59,7 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
         duration: "",
         startDate: "",
         endDate: "",
-        attempts: "",
+        attempts_limit: "",
         showResults: false,
         attachmentUrl: "",
         // Pastikan saat tambah baru, material type default-nya valid
@@ -497,13 +498,8 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   className="form-control border-0 shadow-sm"
                   placeholder="3"
                   min="1"
-                  value={formData.attempts || ""}
-                  onChange={(e) =>
-                    setFormData(prev => ({
-                      ...prev,
-                      attempts: e.target.value
-                    }))
-                  }
+                  value={formData.attempts_limit || ""}
+                  onChange={(e) => setFormData({ ...formData, attempts_limits: e.target.value })}
                   style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
                 />
               </div>

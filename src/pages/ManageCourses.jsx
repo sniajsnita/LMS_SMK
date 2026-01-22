@@ -464,40 +464,54 @@ export default function ManageCoursesUI() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return alert("Silakan login untuk memberikan like");
 
-      // 1. Cari tahu apakah user sudah like (cek di tabel discussion_likes)
-      const { data: existingLike, error: fetchError } = await supabase
-        .from("discussion_likes")
-        .select("id")
-        .eq("discussion_id", discussionId)
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // 1. Ambil data diskusi yang sedang diklik dari state
+      const targetDisc = discussions.find((d) => d.id === discussionId);
+      if (!targetDisc) return;
 
-      if (fetchError) throw fetchError;
+      const isCurrentlyLiked = targetDisc.isLiked;
 
-      if (existingLike) {
-        // --- PROSES UNLIKE ---
-        const { error: deleteError } = await supabase
+      // 2. --- OPTIMISTIC UPDATE (PERUBAHAN INSTAN) ---
+      // Kita langsung ubah state 'discussions' sebelum database merespon
+      setDiscussions((prev) =>
+        prev.map((d) =>
+          d.id === discussionId
+            ? {
+                ...d,
+                isLiked: !isCurrentlyLiked, // Balikkan status
+                likesCount: isCurrentlyLiked
+                  ? Math.max(0, (d.likesCount || 0) - 1) // Kurangi jika sudah like
+                  : (d.likesCount || 0) + 1,            // Tambah jika belum
+              }
+            : d
+        )
+      );
+
+      // 3. --- PROSES DATABASE (DI BELAKANG LAYAR) ---
+      if (isCurrentlyLiked) {
+        // PROSES UNLIKE
+        const { error } = await supabase
           .from("discussion_likes")
           .delete()
-          .eq("id", existingLike.id);
-
-        if (deleteError) throw deleteError;
+          .match({ discussion_id: discussionId, user_id: user.id });
+        
+        if (error) throw error;
       } else {
-        // --- PROSES LIKE ---
-        const { error: insertError } = await supabase
+        // PROSES LIKE
+        const { error } = await supabase
           .from("discussion_likes")
           .insert([{ discussion_id: discussionId, user_id: user.id }]);
-
-        if (insertError) throw insertError;
+        
+        // Jika error duplicate (sudah ada), tidak masalah, abaikan saja
+        if (error && error.code !== '23505') throw error;
       }
 
-      // 2. REFRESH DATA (Penting!)
-      // Setelah insert/delete berhasil, panggil fetchDiscussions 
-      // agar variabel 'isLiked' dan 'likesCount' dihitung ulang oleh database
-      await fetchDiscussions();
+      // CATATAN: Hapus 'await fetchDiscussions()' agar tidak terjadi double-flicker 
+      // karena UI sudah kita update secara manual di langkah ke-2.
 
     } catch (error) {
-      console.error("Gagal like:", error.message);
+      console.error("Gagal update like:", error.message);
+      // Jika gagal total, barulah kita sinkronkan ulang dengan database
+      fetchDiscussions(); 
     }
   };
 
@@ -674,7 +688,8 @@ export default function ManageCoursesUI() {
         payload.questions_count = parseInt(dataFromModal.questions) || 0;
         payload.start_date = dataFromModal.startDate || null;
         payload.end_date = dataFromModal.endDate || null;
-        payload.attempts_limit = parseInt(dataFromModal.attempts) || 1;
+        payload.attempts_limit = parseInt(dataFromModal.attempts_limit) || 1;
+        
         payload.link = dataFromModal.link || null;
         delete payload.file_path;
         delete payload.file_url;
