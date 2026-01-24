@@ -499,7 +499,7 @@ const ItemModal = ({ show, type, editingItem, onClose, onSave }) => {
                   placeholder="3"
                   min="1"
                   value={formData.attempts_limit || ""}
-                  onChange={(e) => setFormData({ ...formData, attempts_limits: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, attempts_limit: e.target.value })}
                   style={{ borderRadius: "12px", padding: "12px 16px", background: "#f8f9fa" }}
                 />
               </div>

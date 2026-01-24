@@ -534,21 +534,33 @@ export default function CourseDetail() {
   };
 
   const handleStartQuiz = async (quiz) => {
-    // 1. Cek apakah sudah melewati deadline
+    // 1. Cek deadline
     const isPastDeadline = quiz.end_date && new Date() > new Date(quiz.end_date);
     if (isPastDeadline) {
       alert("Maaf, batas waktu pengerjaan kuis ini sudah berakhir.");
       return;
     }
 
-    // 2. Cek apakah sudah pernah klik (sudah ada attempt)
-    if (quiz.quiz_attempts && quiz.quiz_attempts.length > 0) {
-      alert("Anda sudah menggunakan kesempatan mencoba kuis ini.");
+    // 2. Cek limit percobaan menggunakan user_attempts yang sudah dihitung
+    const limit = quiz.attempts_limit || 1;
+    if (quiz.user_attempts >= limit) {
+      alert(`Anda sudah menggunakan semua (${limit}) kesempatan mencoba kuis ini.`);
       return;
     }
 
     try {
-      const { error } = await supabase
+      // 3. Hapus data lama agar tidak terjadi "duplicate key error"
+      // Serta memenuhi permintaan: hapus pengerjaan sebelumnya
+      await supabase
+        .from('quiz_attempts')
+        .delete()
+        .match({ 
+          quiz_id: quiz.id, 
+          user_id: currentUser.id 
+        });
+
+      // 4. Masukkan data pengerjaan baru (Skor reset ke 0)
+      const { error: insertError } = await supabase
         .from('quiz_attempts')
         .insert([
           { 
@@ -558,18 +570,17 @@ export default function CourseDetail() {
           }
         ]);
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
-      // Buka link kuis
+      // 5. Buka kuis di tab baru
       window.open(quiz.link, "_blank");
 
-      // PERBAIKAN DI SINI:
-      // Gunakan 'id' (variabel yang diambil dari useSearchParams di atas)
+      // 6. Refresh data (Penting agar UI tahu status terbaru)
       await fetchAllCourseData(id); 
 
     } catch (error) {
       console.error("Gagal memulai kuis:", error.message);
-      alert("Terjadi kesalahan saat memulai kuis.");
+      alert("Terjadi kesalahan teknis. Silakan coba lagi.");
     }
   };
 
@@ -995,84 +1006,66 @@ export default function CourseDetail() {
                 <h5 className="fw-bold mb-4">🏆 Daftar Kuis</h5>
                 <div className="d-flex flex-column gap-3">
                   {quizzes.map((quiz) => {
-                    const attempt = quiz.quiz_attempts?.[0];
-                    const isCompleted = !!attempt;
+                    // PERBAIKAN: Gunakan data yang sudah di-mapping di fetchAllCourseData
+                    const isCompleted = quiz.user_attempts > 0;
+                    const limitReached = quiz.user_attempts >= (quiz.attempts_limit || 1);
                     const isPastDeadline = quiz.end_date && new Date() > new Date(quiz.end_date);
 
                     return (
-                      <div 
-                        key={quiz.id}
-                        className="card border-0 shadow-sm mb-3"
-                        style={{
-                          borderRadius: "16px",
-                          transition: "all 0.3s ease",
-                          opacity: (isPastDeadline && !isCompleted) ? 0.7 : 1,
-                        }}
-                      >
+                      <div key={quiz.id} className="card border-0 shadow-sm mb-3" style={{ borderRadius: "16px" }}>
                         <div className="card-body p-4">
                           <div className="d-flex justify-content-between">
-                            {/* SISI KIRI: INFO KUIS */}
                             <div className="flex-grow-1">
-                              <h5 className="fw-bold mb-2" style={{ color: "#1e293b" }}>{quiz.title}</h5>
-                              <p className="text-muted mb-3">
-                                {quiz.description}
-                              </p>
+                              <h5 className="fw-bold mb-2">{quiz.title}</h5>
+                              <p className="text-muted mb-3">{quiz.description}</p>
                               
                               <div className="d-flex align-items-center gap-2 small text-muted mb-4">
-                                <small className="text-muted align-items-center gap-1">
-                                  <Clock size={14} /> {quiz.duration || "Tidak ada durasi"}
-                                </small>
-                                <small className="text-muted align-items-center gap-1">
-                                  <FileText size={14} /> {quiz.questions_count || quiz.questions || 0} Soal
-                                </small>
+                                <span className="d-flex align-items-center gap-1"><Clock size={14} /> {quiz.duration}</span>
+                                <span className="d-flex align-items-center gap-1"><FileText size={14} /> {quiz.questions} Soal</span>
+                                <span className="d-flex align-items-center gap-1"><Calendar size={14} /> Deadline: {quiz.end_date ? new Date(quiz.end_date).toLocaleDateString('id-ID') : '-'}</span>
                                 <span className="d-flex align-items-center gap-1">
-                                  <Calendar size={14} /> 
-                                  Deadline: {quiz.end_date ? new Date(quiz.end_date).toLocaleDateString('id-ID') : '-'}
-                                </span>
-                                <span className="d-flex align-items-center gap-1">
-                                  <Award size={14} /> 
-                                  Percobaan: 
-                                  <span className={
-                                    (quiz.user_attempts >= (quiz.attempts_limit || 1)) 
-                                    ? "text-danger fw-bold" 
-                                    : "text-primary"
-                                  }>
-                                    {/* Gunakan user_attempts yang sudah dihitung di mapping */}
-                                    {quiz.user_attempts || 0}/{quiz.attempts_limit || 1}
-                                  </span>
-                                  x
+                                  <Award size={14} /> Percobaan: 
+                                  <span className={limitReached ? "text-danger fw-bold" : "text-primary"}>
+                                    {quiz.user_attempts}/{quiz.attempts_limit || 1}
+                                  </span> x
                                 </span>
                               </div>
 
-                              {/* TOMBOL / BADGE DI BAWAH */}
+                              {/* TOMBOL / BADGE - LOGIKA DIPERBAIKI */}
                               <div>
-                                {isCompleted ? (
+                                {limitReached ? (
+                                  /* Kondisi 1: Jatah Habis */
                                   <span className="badge bg-success-subtle text-success px-3 py-2 rounded-2 d-inline-flex align-items-center gap-2 border border-success border-opacity-10">
-                                    <CheckCircle size={16} />
-                                    Selesai - Nilai: {attempt.score}
+                                    <CheckCircle size={16} /> Selesai - Nilai: {quiz.score || 0}
                                   </span>
                                 ) : isPastDeadline ? (
-                                  <span className="badge bg-danger-subtle text-danger px-3 py-2 rounded-2 d-inline-flex align-items-center gap-2 border border-danger border-opacity-10">
-                                    <Lock size={16} />
-                                    Terkunci - Melewati Batas Waktu
-                                  </span>
+                                  /* Kondisi 2: Waktu Habis */
+                                  isCompleted ? (
+                                    <span className="badge bg-success-subtle text-success px-3 py-2 rounded-2 d-inline-flex align-items-center gap-2 border border-success border-opacity-10">
+                                      <CheckCircle size={16} /> Selesai - Nilai: {quiz.score || 0}
+                                    </span>
+                                  ) : (
+                                    <span className="badge bg-danger-subtle text-danger px-3 py-2 rounded-2 d-inline-flex align-items-center gap-2 border border-danger border-opacity-10">
+                                      <Lock size={16} /> Terkunci - Melewati Batas Waktu
+                                    </span>
+                                  )
                                 ) : (
+                                  /* Kondisi 3: Masih ada jatah & Belum Deadline */
                                   <button 
                                     className="btn btn-primary px-4 fw-bold"
                                     style={{ borderRadius: "10px", backgroundColor: "#2563eb", border: "none" }}
                                     onClick={() => handleStartQuiz(quiz)}
                                   >
-                                    Mulai Kuis
+                                    {isCompleted ? "Kerjakan Ulang" : "Mulai Kuis"}
                                   </button>
                                 )}
                               </div>
                             </div>
 
-                            {/* SISI KANAN: NILAI BESAR (Hanya jika selesai) */}
                             {isCompleted && (
                               <div className="text-end d-flex flex-column justify-content-start pt-1">
                                 <div className="fw-bold" style={{ fontSize: "2.5rem", color: "#16a34a", lineHeight: "1" }}>
-                                  {attempt.score}
+                                  {quiz.score || 0}
                                 </div>
                                 <div className="text-muted small fw-medium text-center">Nilai</div>
                               </div>
