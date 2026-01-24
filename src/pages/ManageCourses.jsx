@@ -603,6 +603,22 @@ export default function ManageCoursesUI() {
   const handleEditItem = (type, item) => {
     setItemModalType(type);
     setEditingItem(item);
+
+    // Mengatur data form dengan nilai default agar input tetap terkendali (controlled)
+    setFormData({
+      ...item,
+      title: item.title || "",
+      description: item.description || "",
+      startDate: item.start_date || "",
+      deadline: item.deadline || "",
+      endDate: item.end_date || "", // Untuk quiz
+      allowLate: item.allow_late || false, // Pastikan boolean agar checkbox tidak error
+      attachmentUrl: item.file_url || item.attachment_url || "", 
+      link: item.link || "",
+      attempts_limit: item.attempts_limit || 1,
+      questions: item.questions_count || item.questions || 0
+    });
+
     setShowItemModal(true);
   };
 
@@ -660,6 +676,7 @@ export default function ManageCoursesUI() {
         });
       }
 
+      // Inisialisasi payload dasar
       let payload = {
         course_id: selectedCourse.id,
         title: dataFromModal.title,
@@ -668,6 +685,7 @@ export default function ManageCoursesUI() {
 
       if (editingItem?.id) payload.id = editingItem.id;
 
+      // Logika Spesifik per Tipe
       if (itemModalType === "discussions") {
         payload.user_id = user.id;
       }
@@ -679,7 +697,9 @@ export default function ManageCoursesUI() {
       }
       else if (itemModalType === "assignments") {
         if (!dataFromModal.deadline) throw new Error("Deadline wajib diisi");
+        payload.start_date = dataFromModal.startDate || null; // Tambahkan start_date
         payload.deadline = dataFromModal.deadline;
+        payload.allow_late = dataFromModal.allowLate || false; // SIMPAN STATUS IZINKAN TERLAMBAT
         payload.file_url = uploadedFile?.publicUrl || dataFromModal.file_url || null;
         payload.file_path = uploadedFile?.path || dataFromModal.file_path || null;
       }
@@ -689,21 +709,21 @@ export default function ManageCoursesUI() {
         payload.start_date = dataFromModal.startDate || null;
         payload.end_date = dataFromModal.endDate || null;
         payload.attempts_limit = parseInt(dataFromModal.attempts_limit) || 1;
-        
         payload.link = dataFromModal.link || null;
-        delete payload.file_path;
-        delete payload.file_url;
       }
 
+      // Eksekusi Simpan ke DB
       const savedData = await insertItemByType({ type: itemModalType, payload });
 
+      // Update State UI agar langsung berubah tanpa reload
       if (itemModalType === "discussions") {
-        await fetchDiscussions(); // Panggil fungsi fetch agar data terbaru muncul
+        await fetchDiscussions();
       } else {
         const updateState = (prev) => {
           if (editingItem) return prev.map((item) => (item.id === editingItem.id ? { ...item, ...savedData } : item));
           return [savedData, ...prev];
         };
+
         if (itemModalType === "materials") setMaterials(updateState);
         if (itemModalType === "assignments") setAssignments(updateState);
         if (itemModalType === "quizzes") setQuizzes(updateState);

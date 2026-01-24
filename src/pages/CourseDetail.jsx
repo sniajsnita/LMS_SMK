@@ -935,62 +935,58 @@ export default function CourseDetail() {
                         </div>
                         <div className="d-flex flex-wrap gap-2">
                           {assignment.submissions && assignment.submissions.length > 0 ? (
+                            /* JIKA SUDAH DIKUMPULKAN */
                             (() => {
                               const sub = assignment.submissions[0];
                               const isLate = new Date(sub.submitted_at) > new Date(assignment.deadline);
-                              
                               return (
                                 <>
                                   <span className={`badge bg-${isLate ? 'danger' : 'success'}-subtle text-${isLate ? 'danger' : 'success'} px-3 py-2 rounded-pill d-flex align-items-center`}>
-                                    {isLate ? (
-                                      <>
-                                        <Clock size={14} className="me-1" />
-                                        Terlambat Dikumpulkan
-                                      </>
-                                    ) : (
-                                      <>
-                                        <CheckCircle size={14} className="me-1" />
-                                        Sudah Dikumpulkan
-                                      </>
-                                    )}
+                                    {isLate ? <Clock size={14} className="me-1" /> : <CheckCircle size={14} className="me-1" />}
+                                    {isLate ? "Terlambat Dikumpulkan" : "Sudah Dikumpulkan"}
                                   </span>
                                   {assignment.score === null && (
-                                    <button 
-                                      className="btn btn-outline-danger btn-sm px-3 fw-medium d-flex align-items-center gap-1"
-                                      style={{ 
-                                        borderRadius: "10px",
-                                        transition: "all 0.2s ease"
-                                      }}
-                                      // HUBUNGKAN KE FUNGSI DI ATAS
-                                      onClick={() => handleCancelSubmission(assignment.id)} 
-                                      
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.background = "#fef2f2";
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.background = "transparent";
-                                      }}
-                                    >
-                                      <X size={14} />
-                                      Batalkan Pengumpulan
+                                    <button className="btn btn-outline-danger rounded-pill btn-sm px-3" onClick={() => handleCancelSubmission(assignment.id)}>
+                                      <X size={14} /> Batalkan Pengumpulan
                                     </button>
                                   )}
                                 </>
                               );
                             })()
                           ) : (
-                            /* Jika belum ada data di array submissions */
-                            <button 
-                              className="btn btn-primary btn-sm px-4 fw-bold"
-                              style={{ 
-                                borderRadius: "10px", 
-                                background: "linear-gradient(135deg, #2563eb, #16a34a)", 
-                                border: "none" 
-                              }}
-                              onClick={() => handleOpenSubmitModal(assignment)}
-                            >
-                              Kerjakan Tugas
-                            </button>
+                            /* JIKA BELUM DIKUMPULKAN */
+                            (() => {
+                              const now = new Date();
+                              const deadline = assignment.deadline ? new Date(assignment.deadline) : null;
+                              const isPastDeadline = deadline && now > deadline;
+                              
+                              // LOGIKA UTAMA: Cek jika sudah lewat deadline tapi guru tidak izinkan telat
+                              if (isPastDeadline && !assignment.allow_late) {
+                                return (
+                                  <span className="badge bg-danger-subtle text-danger px-3 py-2 rounded-pill d-inline-flex align-items-center gap-2 border border-danger border-opacity-10">
+                                    <Lock size={16} />
+                                    Terkunci - Batas Waktu Habis
+                                  </span>
+                                );
+                              }
+
+                              // Tombol muncul jika masih dalam waktu atau telat tapi diizinkan
+                              return (
+                                <button 
+                                  className="btn btn-primary btn-sm px-4 fw-bold"
+                                  style={{ 
+                                    borderRadius: "10px", 
+                                    background: isPastDeadline 
+                                      ? "linear-gradient(135deg, #f59e0b, #d97706)" // Warna orange jika telat
+                                      : "linear-gradient(135deg, #2563eb, #16a34a)", 
+                                    border: "none" 
+                                  }}
+                                  onClick={() => handleOpenSubmitModal(assignment)}
+                                >
+                                  {isPastDeadline ? "Kumpulkan Terlambat" : "Kerjakan Tugas"}
+                                </button>
+                              );
+                            })()
                           )}
                         </div>
                       </div>
