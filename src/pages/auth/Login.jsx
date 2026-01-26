@@ -8,6 +8,26 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          // 'window.location.origin' akan mengambil http://localhost:5173 
+          // atau domain asli kamu secara otomatis saat sudah online.
+          redirectTo: `${window.location.origin}/about`, 
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error:", error.message);
+      alert("Gagal login dengan Google: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -50,8 +70,18 @@ export default function Login() {
             <p className="text-muted">Sign in to continue</p>
           </div>
 
-          <button className="btn btn-outline-secondary w-100 rounded-3 py-2 mb-3">
-            Continue with Google
+          <button 
+            type="button" // Sangat penting agar tidak bentrok dengan submit form email
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="btn btn-outline-secondary w-100 rounded-3 py-2 mb-3 d-flex align-items-center justify-content-center gap-2"
+          >
+            <img 
+              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+              width="18" 
+              alt="Google Logo" 
+            />
+            {loading ? "Menghubungkan..." : "Continue with Google"}
           </button>
 
           <div className="text-center text-muted my-3 position-relative">
