@@ -116,7 +116,7 @@ export default function MainLayout() {
     { title: "Tugas", path: "/assignments", icon: FileText },
     { title: "Diskusi", path: "/discussions", icon: MessageSquare },
     { title: "Progress", path: "/progres", icon: BarChart3 },
-    { title: "Undangan", path: "/invitations", icon: Mail, badge: 3 },
+    // { title: "Undangan", path: "/invitations", icon: Mail, badge: 3 },
   ];
 
   const unreadCount = notifications.filter(n => !n.is_read).length;

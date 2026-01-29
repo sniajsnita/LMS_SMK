@@ -1,91 +1,115 @@
-import React, { useState } from "react";
-import { GraduationCap, Target, Users, Award, BookOpen, Lightbulb, Mail, Phone, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
+import { GraduationCap, Target, Users, Award, BookOpen, Lightbulb, Mail, Phone, Edit3, Save, CheckCircle } from "lucide-react";
 
 export default function About() {
+  const [teachers, setTeachers] = useState([]);
   const [selectedGuru, setSelectedGuru] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const guruList = [
-    {
-      name: "Dr. H. Ahmad Fauzi, M.Pd",
-      role: "Kepala Sekolah",
-      img: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-      email: "ahmad.fauzi@smktmplus.sch.id",
-      phone: "0812-3456-7890",
-      bio: "Memiliki pengalaman lebih dari 20 tahun di bidang pendidikan. Meraih gelar Doktor dari Universitas Pendidikan Indonesia dengan spesialisasi Manajemen Pendidikan.",
-      pendidikan: ["S3 Manajemen Pendidikan - UPI", "S2 Administrasi Pendidikan - UPI", "S1 Pendidikan - IKIP Bandung"],
-      keahlian: ["Manajemen Sekolah", "Kepemimpinan Pendidikan", "Pengembangan Kurikulum"]
-    },
-    {
-      name: "Ir. Budi Santoso, M.T",
-      role: "Wakil Kepala Sekolah",
-      img: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
-      email: "budi.santoso@smktmplus.sch.id",
-      phone: "0813-4567-8901",
-      bio: "Berpengalaman dalam bidang teknik dan pendidikan kejuruan. Aktif dalam pengembangan kurikulum SMK berbasis industri.",
-      pendidikan: ["S2 Teknik Mesin - ITB", "S1 Teknik Mesin - ITB"],
-      keahlian: ["Teknik Mesin", "Manajemen Bengkel", "Kurikulum Vokasi"]
-    },
-    {
-      name: "Siti Nurhaliza, S.Pd",
-      role: "Guru Matematika",
-      img: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=face",
-      email: "siti.nurhaliza@smktmplus.sch.id",
-      phone: "0814-5678-9012",
-      bio: "Guru matematika berdedikasi dengan metode pengajaran inovatif. Peraih penghargaan Guru Teladan Kabupaten Cianjur 2023.",
-      pendidikan: ["S1 Pendidikan Matematika - UPI"],
-      keahlian: ["Matematika Terapan", "Statistika", "Metode Pembelajaran Aktif"]
-    },
-    {
-      name: "Drs. Hendra Wijaya",
-      role: "Guru Teknik Mesin",
-      img: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face",
-      email: "hendra.wijaya@smktmplus.sch.id",
-      phone: "0815-6789-0123",
-      bio: "Praktisi industri selama 15 tahun sebelum menjadi guru. Memiliki sertifikasi asesor kompetensi nasional.",
-      pendidikan: ["S1 Teknik Mesin - Universitas Trisakti"],
-      keahlian: ["CNC", "CAD/CAM", "Pemesinan Konvensional"]
-    },
-    {
-      name: "Dewi Lestari, S.Kom",
-      role: "Guru TKJ",
-      img: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face",
-      email: "dewi.lestari@smktmplus.sch.id",
-      phone: "0816-7890-1234",
-      bio: "Spesialis jaringan komputer dengan sertifikasi Cisco. Aktif mengikuti perkembangan teknologi terkini.",
-      pendidikan: ["S1 Teknik Informatika - STMIK Bandung"],
-      keahlian: ["Jaringan Komputer", "Cisco Networking", "Linux Administration"]
-    },
-    {
-      name: "Muhammad Rizki, S.T",
-      role: "Guru Teknik Elektro",
-      img: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&h=150&fit=crop&crop=face",
-      email: "muhammad.rizki@smktmplus.sch.id",
-      phone: "0817-8901-2345",
-      bio: "Ahli di bidang instalasi listrik dan elektronika. Berpengalaman dalam proyek-proyek instalasi industri.",
-      pendidikan: ["S1 Teknik Elektro - Polban"],
-      keahlian: ["Instalasi Listrik", "PLC", "Elektronika Industri"]
-    },
-    {
-      name: "Rina Wulandari, M.Pd",
-      role: "Guru Bahasa Indonesia",
-      img: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&crop=face",
-      email: "rina.wulandari@smktmplus.sch.id",
-      phone: "0818-9012-3456",
-      bio: "Guru bahasa dengan passion di bidang literasi. Pembina ekstrakulikuler jurnalistik dan penulisan kreatif.",
-      pendidikan: ["S2 Pendidikan Bahasa Indonesia - UPI", "S1 Sastra Indonesia - Unpad"],
-      keahlian: ["Sastra Indonesia", "Jurnalistik", "Public Speaking"]
-    },
-    {
-      name: "Agus Prasetyo, S.Pd.I",
-      role: "Guru PAI",
-      img: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop&crop=face",
-      email: "agus.prasetyo@smktmplus.sch.id",
-      phone: "0819-0123-4567",
-      bio: "Hafiz Quran dan pembina kegiatan keagamaan sekolah. Aktif dalam organisasi Muhammadiyah.",
-      pendidikan: ["S1 Pendidikan Agama Islam - UIN Bandung"],
-      keahlian: ["Fiqih", "Tahfidz", "Dakwah"]
-    },
-  ];
+  // State tambahan untuk fitur Edit
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    bio: "",
+    phone: "",
+    email: "",
+    pendidikan: "",
+    keahlian: ""
+  });
+
+  useEffect(() => {
+    fetchUser();
+    fetchTeachers();
+  }, []);
+
+  async function fetchUser() {
+    const { data: { user } } = await supabase.auth.getUser();
+    setCurrentUser(user);
+  }
+
+  async function fetchTeachers() {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("course_members")
+        .select(`
+          role,
+          profiles:user_id (*),
+          courses:courses_id (subject) 
+        `)
+        .eq("role", "teacher");
+
+      if (error) throw error;
+
+      const teacherMap = new Map();
+      data.forEach((item) => {
+        if (item.profiles) {
+          const teacherId = item.profiles.id;
+          const courseTitle = item.courses?.subject || "Mata Pelajaran";
+          if (teacherMap.has(teacherId)) {
+            const existing = teacherMap.get(teacherId);
+            if (!existing.subjects.includes(courseTitle)) {
+              existing.subjects.push(courseTitle);
+            }
+          } else {
+            teacherMap.set(teacherId, {
+              ...item.profiles,
+              subjects: [courseTitle]
+            });
+          }
+        }
+      });
+      setTeachers(Array.from(teacherMap.values()));
+    } catch (error) {
+      console.error("Error:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleSaveProfile = async () => {
+    // Validasi WhatsApp: Hanya boleh angka
+    const whatsappPattern = /^[0-9]+$/;
+    if (editForm.phone && !whatsappPattern.test(editForm.phone)) {
+      alert("Nomor WhatsApp harus berupa angka saja!");
+      return;
+    }
+
+    try {
+      const payload = {
+        bio: editForm.bio,
+        phone: editForm.phone,
+        // Kita tidak mengirim email ke Supabase karena email sudah dikunci dari Auth
+        pendidikan: editForm.pendidikan.split(",").map(s => s.trim()).filter(s => s !== ""),
+        keahlian: editForm.keahlian.split(",").map(s => s.trim()).filter(s => s !== ""),
+      };
+
+      const { error } = await supabase
+        .from("profiles")
+        .update(payload)
+        .eq("id", currentUser.id);
+
+      if (error) throw error;
+
+      // --- LOGIKA UPDATE LANGSUNG TANPA RELOAD ---
+      // 1. Update data guru yang sedang dipilih (di dalam modal)
+      setSelectedGuru(prev => ({
+        ...prev,
+        ...payload
+      }));
+
+      // 2. Update data di list utama agar kartu di luar juga berubah
+      setTeachers(prevTeachers => 
+        prevTeachers.map(t => t.id === currentUser.id ? { ...t, ...payload } : t)
+      );
+
+      alert("Profil berhasil diperbarui!");
+      setIsEditing(false); // Tutup form edit
+    } catch (error) {
+      alert("Gagal menyimpan: " + error.message);
+    }
+  };
 
   return (
     <div className="container py-5">
@@ -313,43 +337,149 @@ export default function About() {
       {/* DAFTAR GURU */}
       <h2 className="text-center fw-bold mb-4 display-6">Tenaga Pengajar</h2>
       <div className="row g-4 mb-5">
-        {guruList.map((guru, i) => (
-          <div className="col-6 col-md-3" key={i}>
+        {loading ? (
+          <div className="col-12 text-center py-5">
+            <div className="spinner-border text-primary"></div>
+          </div>
+        ) : teachers.map((guru) => (
+          <div className="col-6 col-md-3" key={guru.id}>
             <div
-              className="card text-center border-0 shadow-sm h-100"
-              style={{ 
-                cursor: "pointer",
-                transition: "all 0.3s ease"
-              }}
+              className="card text-center border-0 shadow-sm h-100 p-4"
+              style={{ cursor: "pointer", transition: "0.3s" }}
               data-bs-toggle="modal"
               data-bs-target="#guruModal"
-              onClick={() => setSelectedGuru(guru)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-8px)";
-                e.currentTarget.style.boxShadow = "0 10px 30px rgba(37, 99, 235, 0.15)";
-                e.currentTarget.style.borderColor = "#2563eb";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "";
-                e.currentTarget.style.borderColor = "transparent";
+              onClick={() => {
+                setSelectedGuru(guru);
+                setIsEditing(false);
+                setEditForm({
+                  bio: guru.bio || "",
+                  phone: guru.phone || "",
+                  email: guru.email || "",
+                  pendidikan: guru.pendidikan?.join(", ") || "",
+                  keahlian: guru.keahlian?.join(", ") || ""
+                });
               }}
             >
-              <div className="card-body p-4">
-                <img 
-                  src={guru.img} 
-                  className="rounded-circle mx-auto mb-3 border border-3 border-primary" 
-                  width="90" 
-                  height="90"
-                  style={{ objectFit: "cover" }}
-                  alt={guru.name}
-                />
-                <h6 className="fw-bold mb-1">{guru.name}</h6>
-                <p className="text-muted small mb-0">{guru.role}</p>
-              </div>
+              <img src={guru.avatar_url || `https://ui-avatars.com/api/?name=${guru.full_name}&background=random`} className="rounded-circle mx-auto mb-3 border border-3 border-primary" width="90" height="90" style={{ objectFit: "cover" }} />
+              <h6 className="fw-bold mb-1">{guru.full_name}</h6>
+              <p className="small text-muted mb-0">{guru.subjects.join(", ")}</p>
             </div>
           </div>
         ))}
+      </div>
+
+      {/* MODAL PROFIL GURU (DISATUKAN DI SINI) */}
+      <div className="modal fade" id="guruModal" tabIndex="-1">
+        <div className="modal-dialog modal-lg modal-dialog-centered">
+          <div className="modal-content border-0 shadow-lg">
+            {selectedGuru && (
+              <>
+                <div className="modal-header border-0 pb-0">
+                  <h4 className="modal-title fw-bold">Profil Pengajar</h4>
+                  <button type="button" className="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div className="modal-body p-4">
+                  {/* Cek Pemilik Akun untuk Tombol Edit */}
+                  {currentUser?.id === selectedGuru.id && !isEditing && (
+                    <button className="btn btn-sm btn-outline-primary mb-4 d-flex align-items-center gap-2" onClick={() => setIsEditing(true)}>
+                      <Edit3 size={16} /> Lengkapi Data Saya
+                    </button>
+                  )}
+
+                  {isEditing ? (
+                    /* --- MODE FORM EDIT --- */
+                    <div className="row g-3">
+                      <div className="col-md-6">
+                        <label className="form-label small fw-bold text-muted">Email (Terkunci)</label>
+                        <input 
+                          type="email" 
+                          className="form-control bg-light" 
+                          value={selectedGuru.email || currentUser?.email} 
+                          readOnly 
+                          disabled 
+                          style={{ cursor: 'not-allowed' }}
+                        />
+                      </div>
+                      <div className="col-md-6">
+                        <label className="form-label small fw-bold">Nomor WhatsApp (Angka saja)</label>
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          placeholder="Contoh: 0812345678"
+                          value={editForm.phone} 
+                          onChange={e => {
+                            // Hanya izinkan angka saat mengetik
+                            const value = e.target.value.replace(/\D/g, "");
+                            setEditForm({...editForm, phone: value});
+                          }} 
+                        />
+                      </div>
+                      
+                      <div className="col-12">
+                        <label className="form-label small fw-bold">Biografi</label>
+                        <textarea className="form-control" rows="3" value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})}></textarea>
+                      </div>
+                      <div className="col-12">
+                        <label className="form-label small fw-bold">Pendidikan (Pisahkan dengan koma)</label>
+                        <input type="text" className="form-control" value={editForm.pendidikan} onChange={e => setEditForm({...editForm, pendidikan: e.target.value})} />
+                      </div>
+                      <div className="col-12">
+                        <label className="form-label small fw-bold">Keahlian (Pisahkan dengan koma)</label>
+                        <input type="text" className="form-control" value={editForm.keahlian} onChange={e => setEditForm({...editForm, keahlian: e.target.value})} />
+                      </div>
+                      <div className="col-12 d-flex gap-2 mt-3">
+                        <button className="btn btn-primary" onClick={handleSaveProfile}><Save size={16} className="me-1"/> Simpan</button>
+                        <button className="btn btn-light border" onClick={() => setIsEditing(false)}>Batal</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* --- MODE TAMPILAN PROFIL (Style Asli Kamu) --- */
+                    <div className="row g-4">
+                      <div className="col-md-4 text-center">
+                        <img src={selectedGuru.avatar_url || `https://ui-avatars.com/api/?name=${selectedGuru.full_name}&background=random`} className="rounded-circle mb-3 border border-4 border-primary shadow" width="150" height="150" style={{ objectFit: "cover" }} />
+                        <h5 className="fw-bold mb-2">{selectedGuru.full_name}</h5>
+                        <span className="badge rounded-pill px-3 py-2" style={{ background: "#dbeafe", color: "#2563eb" }}>Tenaga Pengajar</span>
+                      </div>
+                      <div className="col-md-8">
+                        <p className="text-muted lh-lg mb-4">{selectedGuru.bio || "Belum ada informasi biografi."}</p>
+                        <div className="mb-4">
+                          <h6 className="fw-bold mb-3 d-flex align-items-center gap-2"><BookOpen size={18} className="text-primary" /> Mata Pelajaran</h6>
+                          <div className="d-flex flex-wrap gap-2 ms-4">
+                            {selectedGuru.subjects?.map((sub, idx) => (
+                              <span key={idx} className="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-1">{sub}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="mb-4">
+                          <h6 className="fw-bold mb-3 d-flex align-items-center gap-2"><Mail size={18} className="text-primary" /> Kontak</h6>
+                          <div className="ms-4 small text-muted">
+                            <p className="mb-1"><Mail size={12} /> {selectedGuru.email}</p>
+                            <p className="mb-0"><Phone size={12} /> {selectedGuru.phone || "-"}</p>
+                          </div>
+                        </div>
+                        <div className="mb-4">
+                          <h6 className="fw-bold mb-3 d-flex align-items-center gap-2"><GraduationCap size={18} className="text-success" /> Pendidikan</h6>
+                          <ul className="ms-4 small text-muted">
+                            {selectedGuru.pendidikan?.map((p, idx) => <li key={idx}>{p}</li>) || <li>Belum diisi</li>}
+                          </ul>
+                        </div>
+                        <div>
+                          <h6 className="fw-bold mb-3 d-flex align-items-center gap-2"><Award size={18} className="text-secondary" /> Keahlian</h6>
+                          <div className="d-flex flex-wrap gap-2 ms-4">
+                            {selectedGuru.keahlian?.map((skill, i) => (
+                              <span key={i} className="badge rounded-pill px-3 py-2 border text-dark bg-light">{skill}</span>
+                            )) || <span className="small text-muted">Belum diisi</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* TENTANG SMK */}
@@ -393,99 +523,6 @@ export default function About() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* MODAL PROFIL GURU */}
-      <div className="modal fade" id="guruModal" tabIndex="-1">
-        <div className="modal-dialog modal-lg modal-dialog-centered">
-          <div className="modal-content border-0 shadow-lg">
-            {selectedGuru && (
-              <>
-                <div className="modal-header border-0 pb-0">
-                  <h4 className="modal-title fw-bold">Profil Pengajar</h4>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    data-bs-dismiss="modal"
-                  ></button>
-                </div>
-
-                <div className="modal-body p-4">
-                  <div className="row g-4">
-                    <div className="col-md-4 text-center">
-                      <img
-                        src={selectedGuru.img}
-                        className="rounded-circle mb-3 border border-4 border-primary shadow"
-                        width="150"
-                        height="150"
-                        style={{ objectFit: "cover" }}
-                        alt={selectedGuru.name}
-                      />
-                      <h5 className="fw-bold mb-2">{selectedGuru.name}</h5>
-                      <span 
-                        className="badge rounded-pill px-3 py-2"
-                        style={{ background: "#dbeafe", color: "#2563eb" }}
-                      >
-                        {selectedGuru.role}
-                      </span>
-                    </div>
-
-                    <div className="col-md-8">
-                      <p className="text-muted lh-lg mb-4">{selectedGuru.bio}</p>
-
-                      <div className="mb-4">
-                        <h6 className="fw-bold mb-3 d-flex align-items-center gap-2">
-                          <Mail size={18} style={{ color: "#2563eb" }} />
-                          Kontak
-                        </h6>
-                        <div className="ms-4">
-                          <p className="small mb-2 d-flex align-items-center gap-2">
-                            <Mail size={14} className="text-muted" />
-                            {selectedGuru.email}
-                          </p>
-                          <p className="small mb-0 d-flex align-items-center gap-2">
-                            <Phone size={14} className="text-muted" />
-                            {selectedGuru.phone}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mb-4">
-                        <h6 className="fw-bold mb-3 d-flex align-items-center gap-2">
-                          <GraduationCap size={18} style={{ color: "#16a34a" }} />
-                          Pendidikan
-                        </h6>
-                        <ul className="ms-4 mb-0">
-                          {selectedGuru.pendidikan.map((p, idx) => (
-                            <li key={idx} className="small text-muted mb-1">{p}</li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div>
-                        <h6 className="fw-bold mb-3 d-flex align-items-center gap-2">
-                          <Award size={18} style={{ color: "#9333ea" }} />
-                          Bidang Keahlian
-                        </h6>
-                        <div className="d-flex flex-wrap gap-2 ms-4">
-                          {selectedGuru.keahlian.map((skill, i) => (
-                            <span 
-                              key={i}
-                              className="badge rounded-pill px-3 py-2"
-                              style={{ background: "#faf5ff", color: "#9333ea", border: "1px solid #e9d5ff" }}
-                            >
-                              {skill}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         </div>
       </div>
