@@ -42,6 +42,7 @@ import Invitations from "./pages/Invitations";
 import Profile from "./pages/Profile";
 import Setting from "./pages/Setting";
 import Notifications from "./pages/Notifications";
+import Admin from "./pages/AdminDashboard";
 
 function App() {
   return (
@@ -84,6 +85,7 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/setting" element={<Setting />} />
         <Route path="/notifications" element={<Notifications />} />
+        <Route path="/admin" element={<Admin />} />
       </Route>
 
     </Routes>
