@@ -16,6 +16,7 @@ export default function MainLayout() {
   const [user, setUser] = useState({
     full_name: "",
     email: "",
+    role: "user",
   });
 
   // STATE NOTIFIKASI (MENGGANTIKAN DUMMY)
@@ -53,12 +54,21 @@ export default function MainLayout() {
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (session) {
+        // Ambil detail role dari tabel profiles
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+
         setUser({
           full_name: session.user.user_metadata?.full_name || session.user.email.split('@')[0],
           email: session.user.email,
+          role: profile?.role || "user", // Simpan role ke state
         });
-        // Panggil fetch notif setelah user dipastikan ada
+        
         fetchNotifications();
       } else {
         navigate("/login");
@@ -108,16 +118,19 @@ export default function MainLayout() {
     }
   };
 
-  const menu = [
-    { title: "Tentang Kami", path: "/about", icon: Info },
-    { title: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-    { title: "Kelas Saya", path: "/course", icon: BookOpen },
-    { title: "Kelola Kelas", path: "/manage-course", icon: GraduationCap },
-    { title: "Tugas", path: "/assignments", icon: FileText },
-    { title: "Diskusi", path: "/discussions", icon: MessageSquare },
-    { title: "Progress", path: "/progres", icon: BarChart3 },
-    // { title: "Undangan", path: "/invitations", icon: Mail, badge: 3 },
-  ];
+  const menu = user.role === "admin" 
+    ? [
+        { title: "Admin Dashboard", path: "/admin", icon: LayoutDashboard },
+      ]
+    : [
+        { title: "Tentang Kami", path: "/about", icon: Info },
+        { title: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+        { title: "Kelas Saya", path: "/course", icon: BookOpen },
+        { title: "Kelola Kelas", path: "/manage-course", icon: GraduationCap },
+        { title: "Tugas", path: "/assignments", icon: FileText },
+        { title: "Diskusi", path: "/discussions", icon: MessageSquare },
+        { title: "Progress", path: "/progres", icon: BarChart3 },
+      ];
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -203,56 +216,58 @@ export default function MainLayout() {
             
             <div className="d-flex align-items-center gap-2 gap-sm-3">
               {/* NOTIFICATION DROP-DOWN */}
-              <div className="position-relative notification-container">
-                <button className="btn btn-light position-relative p-2 border-0" style={{ borderRadius: "10px" }} onClick={() => setIsNotificationOpen(!isNotificationOpen)}>
-                  <Bell size={18} />
-                  {unreadCount > 0 && (
-                    <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: "0.6rem", padding: "2px 5px" }}>
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
+              {user.role !== "admin" && (
+                <div className="position-relative notification-container">
+                  <button className="btn btn-light position-relative p-2 border-0" style={{ borderRadius: "10px" }} onClick={() => setIsNotificationOpen(!isNotificationOpen)}>
+                    <Bell size={18} />
+                    {unreadCount > 0 && (
+                      <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: "0.6rem", padding: "2px 5px" }}>
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
 
-                {isNotificationOpen && (
-                  <div className="position-absolute bg-white border rounded-3 shadow-lg" style={{ top: "calc(100% + 8px)", right: 0, width: "320px", maxWidth: "90vw", maxHeight: "400px", zIndex: 1000, overflow: "hidden" }}>
-                    <div className="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center">
-                      <h6 className="mb-0 fw-bold small">Notifikasi</h6>
-                      <span className="badge bg-primary rounded-pill" style={{ fontSize: "0.6rem" }}>{unreadCount} Baru</span>
-                    </div>
+                  {isNotificationOpen && (
+                    <div className="position-absolute bg-white border rounded-3 shadow-lg" style={{ top: "calc(100% + 8px)", right: 0, width: "320px", maxWidth: "90vw", maxHeight: "400px", zIndex: 1000, overflow: "hidden" }}>
+                      <div className="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center">
+                        <h6 className="mb-0 fw-bold small">Notifikasi</h6>
+                        <span className="badge bg-primary rounded-pill" style={{ fontSize: "0.6rem" }}>{unreadCount} Baru</span>
+                      </div>
 
-                    <div className="overflow-y-auto" style={{ maxHeight: "300px" }}>
-                      {notifications.length === 0 ? (
-                        <div className="text-center py-4 text-muted"><p className="small mb-0">Tidak ada notifikasi</p></div>
-                      ) : (
-                        notifications.map((notif) => {
-                          const NotifIcon = getNotificationIcon(notif.type);
-                          return (
-                            <div key={notif.id} className="px-3 py-2 border-bottom" 
-                              style={{ background: notif.is_read ? "white" : "#eff6ff", cursor: "pointer" }}
-                              onClick={() => { navigate('/notifications'); setIsNotificationOpen(false); }}>
-                              <div className="d-flex gap-2 align-items-start">
-                                <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" 
-                                  style={{ width: "32px", height: "32px", background: notif.is_read ? "#e5e7eb" : "linear-gradient(135deg, #2563eb, #16a34a)" }}>
-                                  <NotifIcon size={14} className={notif.is_read ? "text-muted" : "text-white"} />
+                      <div className="overflow-y-auto" style={{ maxHeight: "300px" }}>
+                        {notifications.length === 0 ? (
+                          <div className="text-center py-4 text-muted"><p className="small mb-0">Tidak ada notifikasi</p></div>
+                        ) : (
+                          notifications.map((notif) => {
+                            const NotifIcon = getNotificationIcon(notif.type);
+                            return (
+                              <div key={notif.id} className="px-3 py-2 border-bottom" 
+                                style={{ background: notif.is_read ? "white" : "#eff6ff", cursor: "pointer" }}
+                                onClick={() => { navigate('/notifications'); setIsNotificationOpen(false); }}>
+                                <div className="d-flex gap-2 align-items-start">
+                                  <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" 
+                                    style={{ width: "32px", height: "32px", background: notif.is_read ? "#e5e7eb" : "linear-gradient(135deg, #2563eb, #16a34a)" }}>
+                                    <NotifIcon size={14} className={notif.is_read ? "text-muted" : "text-white"} />
+                                  </div>
+                                  <div className="flex-grow-1 overflow-hidden">
+                                    <p className="mb-0 fw-semibold text-dark text-truncate small">{notif.title}</p>
+                                    <p className="mb-0 text-muted text-truncate small" style={{ fontSize: "0.7rem" }}>{notif.message}</p>
+                                    <p className="mb-0 text-muted" style={{ fontSize: "0.6rem" }}>{formatTime(notif.created_at)}</p>
+                                  </div>
+                                  {!notif.is_read && <div className="rounded-circle bg-primary mt-2" style={{ width: "6px", height: "6px" }} />}
                                 </div>
-                                <div className="flex-grow-1 overflow-hidden">
-                                  <p className="mb-0 fw-semibold text-dark text-truncate small">{notif.title}</p>
-                                  <p className="mb-0 text-muted text-truncate small" style={{ fontSize: "0.7rem" }}>{notif.message}</p>
-                                  <p className="mb-0 text-muted" style={{ fontSize: "0.6rem" }}>{formatTime(notif.created_at)}</p>
-                                </div>
-                                {!notif.is_read && <div className="rounded-circle bg-primary mt-2" style={{ width: "6px", height: "6px" }} />}
                               </div>
-                            </div>
-                          );
-                        })
-                      )}
+                            );
+                          })
+                        )}
+                      </div>
+                      <div className="px-3 py-2 border-top bg-light text-center">
+                        <Link to="/notifications" className="text-decoration-none small fw-semibold" onClick={() => setIsNotificationOpen(false)}>Lihat Semua</Link>
+                      </div>
                     </div>
-                    <div className="px-3 py-2 border-top bg-light text-center">
-                      <Link to="/notifications" className="text-decoration-none small fw-semibold" onClick={() => setIsNotificationOpen(false)}>Lihat Semua</Link>
-                    </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
               <Link to="/profile" className="text-decoration-none d-none d-sm-block">
                 <div className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm" style={{ width: "36px", height: "36px", background: "linear-gradient(135deg, #2563eb, #16a34a)", fontSize: "0.9rem" }}>

@@ -72,6 +72,7 @@ function App() {
 
       {/* ===== MAIN APP (WITH SIDEBAR) ===== */}
       <Route element={<MainLayout />}>
+        <Route path="/admin" element={<Admin />} />
         <Route path="/about" element={<About />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/course" element={<MyCourses />} />

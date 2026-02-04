@@ -32,32 +32,44 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: password,
-    });
+    try {
+      // 1. Proses Login ke Auth Supabase
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
 
-    if (authError) {
-      alert("Gagal Login: " + authError.message);
+      if (authError) throw authError;
+
+      // 2. Ambil data Profile untuk mengecek Role
+      // Pastikan kolom 'role' sudah kamu buat di tabel 'profiles' via SQL Editor
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", authData.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Profile Error:", profileError.message);
+        // Jika profil gagal diambil, default ke halaman about
+        navigate("/about");
+        return;
+      }
+
+      // 3. Logika Pengalihan Berdasarkan Role
+      if (profile?.role === "admin") {
+        console.log("Welcome Admin! Redirecting to Dashboard...");
+        navigate("/admin"); // Pastikan path ini sesuai dengan route CRUD Guru kamu
+      } else {
+        console.log("User logged in. Redirecting to About...");
+        navigate("/about");
+      }
+
+    } catch (error) {
+      alert("Gagal Login: " + error.message);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .single();
-
-    if (authError) {
-      alert("Gagal Login: " + authError.message);
-      setLoading(false);
-      return;
-    }
-
-    navigate("/about");
-    
-    setLoading(false);
   };
 
   return (
