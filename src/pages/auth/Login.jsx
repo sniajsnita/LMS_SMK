@@ -1,12 +1,32 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react"; // Gabungkan React hooks di sini
+import { Link, useNavigate, useLocation } from "react-router-dom"; // Gabungkan router hooks di sini
 import { supabase } from "../../lib/supabase";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  
   const navigate = useNavigate();
+  const location = useLocation(); 
+  const [infoMessage, setInfoMessage] = useState("");
+
+  useEffect(() => {
+    const clearSessionAndCheckMessage = async () => {
+      // 1. PAKSA LOGOUT: Hapus sesi lama saat user masuk ke halaman login
+      // Ini memastikan user tidak bisa 'auto-login' lewat URL
+      await supabase.auth.signOut();
+
+      // 2. Tangkap pesan dari ProtectedRoute (jika ada)
+      if (location.state?.message) {
+        setInfoMessage(location.state.message);
+        // Bersihkan state agar pesan tidak muncul lagi saat di-refresh
+        window.history.replaceState({}, document.title);
+      }
+    };
+    
+    clearSessionAndCheckMessage();
+  }, [location]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -81,6 +101,13 @@ export default function Login() {
             <h2 className="fw-bold mb-1">Welcome to EduSpace</h2>
             <p className="text-muted">Sign in to continue</p>
           </div>
+
+          {/* MENAMPILKAN PESAN KETERANGAN JIKA ADA */}
+          {infoMessage && (
+            <div className="alert alert-warning small py-2 text-center" role="alert">
+              {infoMessage}
+            </div>
+          )}
 
           <button 
             type="button" // Sangat penting agar tidak bentrok dengan submit form email

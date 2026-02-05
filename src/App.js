@@ -27,6 +27,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import AuthLayout from "./layout/AuthLayout";
 import MainLayout from "./layout/MainLayout";
 
+import ProtectedRoute from "./components/route/ProtectedRoute";
+
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Registrasi";
 
@@ -47,48 +49,38 @@ import Admin from "./pages/AdminDashboard";
 function App() {
   return (
     <Routes>
+      {/* ===== PUBLIC ROUTES ===== */}
+      {/* 1. Default Route: Paksa ke Login */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
 
-      {/* ===== DEFAULT ===== */}
-      <Route path="/" element={<Navigate to="/login" />} />
+      {/* 2. Public Routes */}
+      <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
+      <Route path="/registrasi" element={<AuthLayout><Register /></AuthLayout>} />
 
-      {/* ===== AUTH (NO SIDEBAR) ===== */}
-      <Route
-        path="/login"
-        element={
-          <AuthLayout>
-            <Login />
-          </AuthLayout>
-        }
-      />
+      {/* ===== PROTECTED ROUTES (Hanya User Login) ===== */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/course" element={<MyCourses />} />
+          <Route path="/course-detail" element={<CourseDetail />} />
+          <Route path="/assignments" element={<Assignments />} />
+          <Route path="/discussions" element={<Discussions />} />
+          <Route path="/progres" element={<Progres />} />
+          <Route path="/invitations" element={<Invitations />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/setting" element={<Setting />} />
+          <Route path="/notifications" element={<Notifications />} />
 
-      <Route
-        path="/registrasi"
-        element={
-          <AuthLayout>
-            <Register />
-          </AuthLayout>
-        }
-      />
-
-      {/* ===== MAIN APP (WITH SIDEBAR) ===== */}
-      <Route element={<MainLayout />}>
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/course" element={<MyCourses />} />
-        <Route path="/course-detail" element={<CourseDetail />} />
-        <Route path="/manage-course" element={<ManageCourses />} />
-        <Route path="/assignments" element={<Assignments />} />
-        <Route path="/assignments" element={<Assignments />} />
-        <Route path="/discussions" element={<Discussions />} />
-        <Route path="/progres" element={<Progres />} />
-        <Route path="/invitations" element={<Invitations />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/setting" element={<Setting />} />
-        <Route path="/notifications" element={<Notifications />} />
-        <Route path="/admin" element={<Admin />} />
+          {/* KHUSUS ADMIN (Hanya Role Admin) */}
+          <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/manage-course" element={<ManageCourses />} />
+          </Route>
+        </Route>
       </Route>
-
+      {/* 4. Catch All: Jika ngetik URL ngawur, lempar ke login */}
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
